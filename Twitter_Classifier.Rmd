@@ -1,0 +1,593 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r, setup, include=FALSE}
+#### WARNING : Running the notebook from scratch, may take SEVERAL HOURS - Run at your own time.####
+
+# Avoid to run time consuming analysis - comment if you want to run the notebook from scratch
+
+knitr::opts_chunk$set(echo=FALSE,eval=FALSE,message=FALSE, warning=FALSE,tidy=FALSE,fig.align="center",
+                      fig.width=5, fig.height=3)
+
+
+knitr::knit_hooks$set(inline = function(x) { if(!is.numeric(x)){ x }else{ prettyNum(round(x,3), big.mark=" ") } })
+
+
+# Load functions created for this excercise
+source("twitter_challenge4.R", echo = F, prompt.echo = "", spaced = F)
+
+# Load addiional packages for reporting, not included in R file
+
+if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+if(!require(urltools)) install.packages("urltools", repos = "http://cran.us.r-project.org")
+if(!require(plotly)) install.packages("urltools", repos = "http://cran.us.r-project.org")
+
+```
+
+
+```{r, download_file}
+#download data
+dl <- tempfile()
+download.file("https://d1p17r2m4rzlbo.cloudfront.net/wp-content/uploads/2016/03/socialmedia-disaster-tweets-DFE.csv", dl)
+source_data <- read.csv(dl, stringsAsFactors = FALSE)
+rm(dl)
+
+#initial transformation to feed into
+source_data$id <- seq.int(nrow(source_data))
+source_data <- source_data %>% mutate(target=ifelse(choose_one=="Relevant",1,0)) %>% 
+                select(id,target,text, keyword,location) 
+
+#process source
+processed_source <-  prepare_data(source_data,profanity_clean = 0) 
+write.csv(processed_source,"processed_source.csv")
+
+processed_source <-  prepare_data(source_data,profanity_clean = 1) 
+write.csv(processed_source,"processed_source_clean.csv")
+
+rm(source_data)
+```
+
+```{r, get_domains}
+split<-200
+value <- round(nrow(processed_source)/split,0)
+
+segments <- tibble(start=integer(),end=integer())
+segments <- add_row(segments, start=1,end=value)
+
+for(i in 2:(split-1)){
+   segments <- add_row(segments, start=value*(i-1)+1,end=i*value)
+}
+
+   segments <- add_row(segments, start=value*(split-1)+1,end=nrow(processed_source))
+
+# first segment
+   segment <- processed_source[segments[1,]$start:segments[1,]$end,]
+   domains<-get_domains(segment,anonimised = 0)
+   iteration <- 1
+
+for(i in 179:split){
+  segment <- processed_source[segments[i,]$start:segments[i,]$end,]
+   domains_i<-get_domains(segment,anonimised = 0)
+   domains <- rbind(domains,domains_i)
+   iteration <-segments[i,]$start
+}      
+
+```
+
+```{r}
+domains <-  domains %>% 
+    mutate(domain = gsub(x=expanded_url, pattern = "(http|ftp|https)://",replacement = "")) %>%
+    mutate(domain = gsub(x=domain, pattern = "www.", replacement = "")) %>%
+    mutate(domain = gsub(x=domain, pattern = "ww[0-9].", replacement = "")) %>%
+    mutate(domain = gsub(x = domain, pattern = "/S+", replacement = ""))
+
+domains$domain <- domain(domains$expanded_url)
+domains <-  domains %>% 
+    mutate(domain = gsub(x=domain, pattern = "www.", replacement = "")) %>%
+    mutate(domain = gsub(x=domain, pattern = "ww[0-9].", replacement = "")) %>%
+    mutate(domain = gsub(x = domain, pattern = "m.", replacement = ""))
+
+domains_list <- domains %>% select(domain) %>% unique(.)
+domains_list$domain_key <- paste0("domain_",seq.int(nrow(domains_list)))
+domains <- domains %>% left_join(domains_list,by="domain")
+write.csv(domains,"domains.csv")
+domains_sanitised <- domains %>% select(orig_url,domain=domain_key)
+write.csv(domains_sanitised,"domains_clean.csv")
+
+rm(domains_list)
+```
+
+
+
+```{r}
+source_file <- "processed_source.csv"
+domains_file <- "domains.csv"
+
+source_data <- read.csv(source_file, stringsAsFactors = FALSE)
+domains_data <- read.csv(domains_file, stringsAsFactors = FALSE) %>% 
+                select(link=orig_url,domain,domain_key)
+
+version_number<-as.double(version$minor)/10+as.double(version$major)
+if(version_number<3.6){
+  set.seed(200)
+}else{
+    set.seed(200, sample.kind="Rounding")
+}
+
+validation_index <- createDataPartition(y = source_data$id, times = 1, p = 0.1, list = FALSE)
+training_test<- source_data[-validation_index,]
+validation <- source_data[validation_index,]
+
+test_index <- createDataPartition(y = training_test$id, times = 1, p = 0.1, list = FALSE)
+training<- training_test[-test_index,]
+test <- training_test[test_index,]
+
+rm(source_file,domains_file,validation_index,training_test,test_index,version_number,source_data)
+
+extra_stop_words <- tibble(word=c("t.co","http","https","û_","amp","û","1","2","3",
+                                  "4","5","6","7","8","9","10","Ò","Ûª","ûªs","ûï","å","è",
+                                  "u0089û_"))
+```
+
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.5,4),
+                             link_parameters=c("exp",4,0.75,4))
+```
+
+```{r}
+p <- scores$words %>% ggplot(aes(x=pos_proportion,y=score,
+                          size=n)) +
+  geom_point(aes(text = paste("Word:", word))) +
+  geom_abline(color = "gray40", lty = 2) # +
+#  scale_x_log10(labels = percent_format()) +
+#  scale_y_log10(labels = percent_format())
+
+ggplotly(p)
+rm(p)
+```
+
+
+```{r}
+training_vector <- score_tweets(training,training_tokenised,scores) 
+training_vector$vector %>% left_join(training,by="id") %>%
+  filter(type=="none") %>% select(text)
+```
+
+
+```{r}
+fitting_model <- fit_model(training_vector)
+```
+
+
+```{r}
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+results$eval
+```
+
+
+```{r}
+results$results_extended %>% filter(category == "TP") %>% select(original_text)
+```
+
+```{r}
+results$results_extended %>% filter(category == "TN") %>% select(original_text)
+
+```
+
+
+
+```{r}
+results$results_extended %>% filter(category == "FP") %>% select(original_text)
+
+```
+
+
+```{r}
+results$results_extended %>% filter(category == "FN") %>% select(original_text)
+
+```
+
+
+```{r}
+write.csv(results$results_extended,"results1.csv")
+```
+
+
+```{r}
+corrections <- "target_corrected.csv"
+
+corrected_data <- read.csv(corrections, stringsAsFactors = FALSE)
+initial_results <- results$results_extended
+
+initial_results <- initial_results %>% left_join(corrected_data,by="id") %>% 
+  mutate(target=ifelse(is.na(target_corrected),target,target_corrected)) %>% 
+  select(id,target,text,keyword,location,hashtag,link,mention,original_text)
+initial_results$X <-1
+
+```
+
+
+
+```{r}
+version_number<-as.double(version$minor)/10+as.double(version$major)
+if(version_number<3.6){
+  set.seed(200)
+}else{
+    set.seed(200, sample.kind="Rounding")
+}
+training_old <-training
+test_index <- createDataPartition(y = training_old$id, times = 1, p = 0.12, list = FALSE)
+training<- training_old[-test_index,]
+test <- training_old[test_index,]
+
+training <- rbind(training,initial_results)
+rm(training_old,version_number)
+```
+
+
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.5,4),
+                             link_parameters=c("exp",4,0.75,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+fitting_model <- fit_model(training_vector)
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+results$eval
+
+```
+
+
+```{r}
+results$results_extended %>% filter(category == "FN") %>% select(original_text)
+write.csv(results$results_extended,"results2.csv")
+
+```
+
+
+```{r}
+corrections <- "target_corrected.csv"
+
+corrected_data <- read.csv(corrections, stringsAsFactors = FALSE)
+second_results <- results$results_extended
+
+second_results <- initial_results %>% left_join(corrected_data,by="id") %>% 
+  mutate(target=ifelse(is.na(target_corrected),target,target_corrected)) %>% 
+  select(id,target,text,keyword,location,hashtag,link,mention,original_text)
+second_results$X <-1
+
+second_results <- rbind(second_results,initial_results)
+
+version_number<-as.double(version$minor)/10+as.double(version$major)
+if(version_number<3.6){
+  set.seed(200)
+}else{
+    set.seed(200, sample.kind="Rounding")
+}
+training_old <-training %>% filter(!(id %in% second_results$id))
+test_index <- createDataPartition(y = training_old$id, times = 1, p = 0.15, list = FALSE)
+training<- training_old[-test_index,]
+test <- training_old[test_index,]
+
+training <- rbind(training,initial_results)
+rm(training_old,initial_results,second_results,version_number,test_index)
+```
+
+
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.5,4),
+                             link_parameters=c("exp",4,0.75,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+fitting_model <- fit_model(training_vector)
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+results$eval
+```
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.2),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+fitting_model <- fit_model(training_vector)
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+results$eval
+```
+
+
+```{r}
+results$results_extended %>% filter(category=="FP") %>% select(original_text,word_score,link_score)
+```
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+
+range <- seq(0,0.5,0.05)
+stats <- tibble(parameter=numeric(),accuracy=numeric(),word_accuracy=numeric())
+for (i in range){
+                    scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,i),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+                    training_vector <- score_tweets(training,training_tokenised,scores) 
+                    fitting_model <- fit_model(training_vector)
+                    results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+                    acc <- results$eval[which(results$eval$eval=="aggregate"),]$result_method
+                    w_acc <- results$eval[which(results$eval$eval=="word"),]$result_method
+                    stats <- add_row(stats,parameter=i,accuracy=acc,word_accuracy=w_acc)
+                  }
+
+
+stats
+stats_1 <-stats
+rm(range,acc,w_acc,stats)
+```
+
+
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+
+range <- seq(0,30,1)
+stats <- tibble(parameter=numeric(),accuracy=numeric(),word_accuracy=numeric())
+for (i in range){
+                    scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,i,0.25),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+                    training_vector <- score_tweets(training,training_tokenised,scores) 
+                    fitting_model <- fit_model(training_vector)
+                    results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+                    acc <- results$eval[which(results$eval$eval=="aggregate"),]$result_method
+                    w_acc <- results$eval[which(results$eval$eval=="word"),]$result_method
+                    stats <- add_row(stats,parameter=i,accuracy=acc,word_accuracy=w_acc)
+                  }
+
+
+stats
+stats_2<-stats
+rm(range,acc,w_acc,stats)
+stats_2[which.max(stats_2$accuracy),]$parameter
+```
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+
+range <- seq(0.1,0.9,0.1)
+stats <- tibble(parameter=numeric(),accuracy=numeric(),hashtag_accuracy=numeric())
+for (i in range){
+                    scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.25),
+                             hashtag_parameters=c("exp",4,i,3),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+                    training_vector <- score_tweets(training,training_tokenised,scores) 
+                    fitting_model <- fit_model(training_vector)
+                    results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+                    acc <- results$eval[which(results$eval$eval=="aggregate"),]$result_method
+                    h_acc <- results$eval[which(results$eval$eval=="hashtag"),]$result_method
+                    stats <- add_row(stats,parameter=i,accuracy=acc,hashtag_accuracy=h_acc)
+                  }
+
+
+stats
+stats_3<-stats
+rm(range,acc,w_acc,stats)
+stats_3[which.max(stats_3$accuracy),]$parameter
+```
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+
+range <- seq(0,50,5)
+stats <- tibble(parameter=numeric(),accuracy=numeric(),hashtag_accuracy=numeric())
+for (i in range){
+                    scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.25),
+                             hashtag_parameters=c("exp",4,0.8,i),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+                    training_vector <- score_tweets(training,training_tokenised,scores) 
+                    fitting_model <- fit_model(training_vector)
+                    results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+                    acc <- results$eval[which(results$eval$eval=="aggregate"),]$result_method
+                    h_acc <- results$eval[which(results$eval$eval=="hashtag"),]$result_method
+                    stats <- add_row(stats,parameter=i,accuracy=acc,hashtag_accuracy=h_acc)
+                  }
+
+
+stats
+stats_4<-stats
+rm(range,acc,w_acc,stats)
+stats_4[which.max(stats_4$accuracy),]$parameter
+```
+
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.25),
+                             hashtag_parameters=c("exp",4,0.8,20),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+ 
+                 
+word_grid <-  expand.grid(nIter = seq(2, 20, 1))
+
+
+fitting_model <- fit_model(training_vector,method_word="LogitBoost", tuneGrid_word = word_grid,
+                      method_hashtag="glm",
+                      method_link="glm",
+                      method_handle="glm",
+                      method_aggregate="xgbTree")
+
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+word_model_1<- fitting_model$word        
+stats_5 <- results$eval
+word_model_1 
+stats_5
+```
+
+
+```{r}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.25),
+                             hashtag_parameters=c("exp",4,0.8,20),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+ 
+tuning_grid <-  expand.grid(nIter = seq(2, 20, 1))
+
+fitting_model <- fit_model(training_vector,method_word="glm",
+                      method_hashtag="LogitBoost", tuneGrid_hashtag = tuning_grid,
+                      method_link="LogitBoost", tuneGrid_link = tuning_grid,
+                      method_handle="LogitBoost", tuneGrid_handle = tuning_grid,
+                      method_aggregate="xgbTree")
+
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+hashtag_model_2 <- fitting_model$hashtag
+link_model_2 <- fitting_model$link
+handle_model_2 <- fitting_model$handle
+aggregate_model_2 <- fitting_model$aggregate
+stats_6 <- results$eval
+```
+
+
+```{r}
+hashtag_model_2
+link_model_2
+handle_model_2
+stats_6
+```
+
+
+```{r}
+aggregate_model_2
+```
+
+
+```{r}
+
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.25),
+                             hashtag_parameters=c("exp",4,0.8,20),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+ 
+tuning_grid <-  expand.grid(nIter = 2)
+aggregate_tuning_grid <- expand.grid(nrounds = seq(45,55,1), #50 
+                                     max_depth = seq(1,4,1), #1
+                                     eta = seq(0.2,0.4,0.1),  #0.3
+                                     gamma =seq(0,0.5,0.1), #0
+                                     colsample_bytree = seq(0.7,0.9,0.1), #0.8
+                                     min_child_weight = seq(0,10,1), #1
+                                     subsample = seq(0.65,0.85,0.05)) #0.75
+
+
+fitting_model <- fit_model(training_vector,method_word="glm",
+                      method_hashtag="LogitBoost", tuneGrid_hashtag = tuning_grid,
+                      method_link="LogitBoost", tuneGrid_link = tuning_grid,
+                      method_handle="LogitBoost", tuneGrid_handle = tuning_grid,
+                      method_aggregate="xgbTree", tuneGrid_aggregate = aggregate_tuning_grid)
+
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+
+aggregate_model_3 <- fitting_model$aggregate
+stats_7 <- results$eval
+```
+
+
+
+```{r}
+aggregate_model_3 
+stats_7
+```
+
+
+```{r}
+
+training_validation <- rbind(training,test)
+
+training_tokenised_validation <- tokenise_data(training_validation, extra_stop_words,domains_data,training_flag=TRUE)
+scores_validation<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0.25),
+                             hashtag_parameters=c("exp",4,0.8,20),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4))
+training_vector_validation <- score_tweets(training_validation,training_tokenised_validation,scores_validation) 
+ 
+tuning_grid <-  expand.grid(nIter = 2)
+aggregate_tuning_grid <- expand.grid(nrounds = 53, #53 
+                                     max_depth = 4, #4
+                                     eta = 0.3,  #0.3
+                                     gamma =0 , #0
+                                     colsample_bytree = 0.7, #0.7
+                                     min_child_weight = 7, #7
+                                     subsample = 0.7) #0.7
+
+
+fitting_model_validation <- fit_model(training_vector_validation,method_word="glm",
+                      method_hashtag="LogitBoost", tuneGrid_hashtag = tuning_grid,
+                      method_link="LogitBoost", tuneGrid_link = tuning_grid,
+                      method_handle="LogitBoost", tuneGrid_handle = tuning_grid,
+                      method_aggregate="xgbTree", tuneGrid_aggregate = aggregate_tuning_grid)
+
+```
+
+
+```{r}
+results_validation<-predict_values(validation,fitting_model,scores,extra_stop_words,domains_data)
+
+```
+
+```{r}
+results_validation$eval
+```
+
+```{r}
+confusionMatrix(as.factor(results_validation$results_extended$target),
+                as.factor(results_validation$results_extended$aggregate))
+```
+
+```{r}
+results_validation$results_extended %>% filter(category=="FP")
+```
+
+
+```{r}
+results_validation$results_extended %>% filter(category=="FN")
+```
