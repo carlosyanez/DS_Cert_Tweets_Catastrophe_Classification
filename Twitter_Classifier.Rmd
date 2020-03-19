@@ -44,7 +44,7 @@ if(!require(plotly)) install.packages("urltools", repos = "http://cran.us.r-proj
 ```
 
 
-```{r, download_file}
+```{r, download_source_file}
 #download data
 dl <- tempfile()
 download.file("https://d1p17r2m4rzlbo.cloudfront.net/wp-content/uploads/2016/03/socialmedia-disaster-tweets-DFE.csv", dl)
@@ -91,9 +91,6 @@ for(i in 179:split){
    iteration <-segments[i,]$start
 }      
 
-```
-
-```{r}
 domains <-  domains %>% 
     mutate(domain = gsub(x=expanded_url, pattern = "(http|ftp|https)://",replacement = "")) %>%
     mutate(domain = gsub(x=domain, pattern = "www.", replacement = "")) %>%
@@ -118,28 +115,43 @@ rm(domains_list)
 
 
 
-```{r}
-source_file <- "processed_source.csv"
-domains_file <- "domains.csv"
+```{r, downlad_processed files}
 
-source_data <- read.csv(source_file, stringsAsFactors = FALSE)
-domains_data <- read.csv(domains_file, stringsAsFactors = FALSE) %>% 
+if(download_processed==TRUE){
+
+  if(download_clean==TRUE){
+    
+    source_file <- "processed_source_clean.csv"
+    domains_file <- "domains_clean.csv"
+  }
+  else{
+    source_URL <-
+    domains_URL <-
+    source_file <- "processed_source.csv"
+    domains_file <- "domains.csv"
+  }
+  source_data <- read.csv(source_file, stringsAsFactors = FALSE)
+  domains_data <- read.csv(domains_file, stringsAsFactors = FALSE) %>% 
                 select(link=orig_url,domain,domain_key)
 
-version_number<-as.double(version$minor)/10+as.double(version$major)
-if(version_number<3.6){
-  set.seed(200)
-}else{
+  version_number<-as.double(version$minor)/10+as.double(version$major)
+  if(version_number<3.6){
+      set.seed(200)
+  }else{
     set.seed(200, sample.kind="Rounding")
+  }
+
+  validation_index <- createDataPartition(y = source_data$id, times = 1, p = 0.1, list = FALSE)
+  training_test<- source_data[-validation_index,]
+  validation <- source_data[validation_index,]
+
+  test_index <- createDataPartition(y = training_test$id, times = 1, p = 0.1, list = FALSE)
+  training<- training_test[-test_index,]
+  test <- training_test[test_index,]
+
 }
 
-validation_index <- createDataPartition(y = source_data$id, times = 1, p = 0.1, list = FALSE)
-training_test<- source_data[-validation_index,]
-validation <- source_data[validation_index,]
 
-test_index <- createDataPartition(y = training_test$id, times = 1, p = 0.1, list = FALSE)
-training<- training_test[-test_index,]
-test <- training_test[test_index,]
 
 rm(source_file,domains_file,validation_index,training_test,test_index,version_number,source_data)
 
