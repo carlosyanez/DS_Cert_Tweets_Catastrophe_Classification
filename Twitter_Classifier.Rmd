@@ -60,10 +60,10 @@ source_data <- source_data %>% mutate(target=ifelse(choose_one=="Relevant",1,0))
 processed_source <-  prepare_data(source_data,profanity_clean = 0) 
 write.csv(processed_source,"processed_source.csv")
 
-processed_source <-  prepare_data(source_data,profanity_clean = 1) 
+processed_source <-  prepare_data(source_data,profanity_clean = 1) %>% mutate(original_text=text)
 write.csv(processed_source,"processed_source_clean.csv")
 
-rm(source_data)
+rm(source_data,processed_source)
 ```
 
 ```{r, get_domains}
@@ -121,12 +121,14 @@ if(download_processed==TRUE){
 
   if(download_clean==TRUE){
     
+    source_URL <- 
+    domains_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/domains_clean.csv?token=AAAFP6MJQEF5F25AJ5T2MTK6ONYIM"
     source_file <- "processed_source_clean.csv"
     domains_file <- "domains_clean.csv"
   }
   else{
-    source_URL <-
-    domains_URL <-
+    source_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/processed_source.csv?token=AAAFP6OIRWAD3RSZUYYRYZS6ONYSS"
+    domains_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/domains.csv?token=AAAFP6P37PS7RE6JNGEXGA26ONYLK"
     source_file <- "processed_source.csv"
     domains_file <- "domains.csv"
   }
