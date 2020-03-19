@@ -63,7 +63,7 @@ write.csv(processed_source,"processed_source.csv")
 processed_source <-  prepare_data(source_data,profanity_clean = 1) %>% mutate(original_text=text)
 write.csv(processed_source,"processed_source_clean.csv")
 
-rm(source_data,processed_source)
+rm(source_data,processed_source,profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger)
 ```
 
 ```{r, get_domains}

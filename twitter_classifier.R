@@ -79,6 +79,7 @@ prepare_data <- function(twitter_df,profanity_clean=0){
     data(profanity_arr_bad)
     data(profanity_banned)
     data(profanity_racist)
+    Sys.sleep(100)
     
     special_chars <- as_tibble(c("\\!", "\\@",  "\\#","\\$", "\\&","\\(","\\)",
                                  "\\-","\\‘","\\.","\\/","\\+",'\\"','\\“'))
