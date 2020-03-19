@@ -6,9 +6,19 @@ output: html_notebook
 ```{r, setup, include=FALSE}
 #### WARNING : Running the notebook from scratch, may take SEVERAL HOURS - Run at your own time.####
 
+### Options on how to generate this report
+
+### Evaluate all chunks- this may take a lot of time and includes "unshortening" t.co URLs
+eval<-FALSE
+### Dowload the processed files, to avoid de above
+download_processed <- TRUE
+download_clean <- FALSE ## select TRUE if you want the "clean" versions, without profane words and anonimised URLs.
+### Download .RData file if you just want to knit the report without doing all the calculations (to save time)
+download_rdata <- TRUE
+
 # Avoid to run time consuming analysis - comment if you want to run the notebook from scratch
 
-knitr::opts_chunk$set(echo=FALSE,eval=FALSE,message=FALSE, warning=FALSE,tidy=FALSE,fig.align="center",
+knitr::opts_chunk$set(echo=FALSE,eval=eval,message=FALSE, warning=FALSE,tidy=FALSE,fig.align="center",
                       fig.width=5, fig.height=3)
 
 
@@ -16,7 +26,11 @@ knitr::knit_hooks$set(inline = function(x) { if(!is.numeric(x)){ x }else{ pretty
 
 
 # Load functions created for this excercise
-source("twitter_challenge4.R", echo = F, prompt.echo = "", spaced = F)
+
+if(!file.exists("twitter_classifier.R")){
+  download.file("https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/twitter_classifier.R?token=AAAFP6NJLEOI5QM3YCQYTFC6ONV6U","twitter_classifier.R")
+  }
+source("twitter_classifier.R", echo = F, prompt.echo = "", spaced = F)
 
 # Load addiional packages for reporting, not included in R file
 
@@ -24,6 +38,8 @@ if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.
 if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
 if(!require(urltools)) install.packages("urltools", repos = "http://cran.us.r-project.org")
 if(!require(plotly)) install.packages("urltools", repos = "http://cran.us.r-project.org")
+
+
 
 ```
 
