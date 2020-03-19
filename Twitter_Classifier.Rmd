@@ -1,7 +1,29 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Data Science Capstone - Tweet Classsification System - Catastrophe or Not?"
+author: "Carlos Yáñez Santibáñez"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    fig_caption: yes
+    includes:
+      in_header: header_includes.tex
+geometry: margin=1in,headheight=70pt,headsep=0.3in
+linkcolor: blue
+mainfont: Arial
+fontsize: 11pt
+always_allow_html: true
+#fig_width: 1
+#fig_height: 1 
+
 ---
+
+ <!-- To compile the report into pdf, the files header_includes.tex is require. This file is available at -->
+ <!-- https://github.com/carlosyanez/Movielens-10-M-Recommendation/blob/master/header_includes.tex -->
+ <!-- In addition, for faster generation, datasets have been saved into movielens.RDate available at  -->
+ <!-- https://drive.google.com/open?id=1yrZ4zMqOIawRjUuLXcJz10YcBM8NnSiS  -->
+
 
 ```{r, setup, include=FALSE}
 #### WARNING : Running the notebook from scratch, may take SEVERAL HOURS - Run at your own time.####
@@ -28,7 +50,7 @@ knitr::knit_hooks$set(inline = function(x) { if(!is.numeric(x)){ x }else{ pretty
 # Load functions created for this excercise
 
 if(!file.exists("twitter_classifier.R")){
-  download.file("https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/twitter_classifier.R?token=AAAFP6NJLEOI5QM3YCQYTFC6ONV6U","twitter_classifier.R")
+  download.file("https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/twitter_classifier.R","twitter_classifier.R")
   }
 source("twitter_classifier.R", echo = F, prompt.echo = "", spaced = F)
 
@@ -39,10 +61,38 @@ if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-
 if(!require(urltools)) install.packages("urltools", repos = "http://cran.us.r-project.org")
 if(!require(plotly)) install.packages("urltools", repos = "http://cran.us.r-project.org")
 
+#functions to standardise formattings
 
+standard_table <- function(data,format="html",caption="REMEMBER TO ADD A CAPTION",position="HOLD_position"){
+  
+data  %>% kable(caption=caption,format = format, booktabs = TRUE,format.args = list(decimal.mark = '.', big.mark = " ")) %>%  kable_styling(latex_options = c(position))
+  
+}
+
+#Dowload Environment file, for knitting.
+if(download_rdata==TRUE){
+    if(!file.exists("Twitter_challenge.RData")){
+    download.file("https://github.com/carlosyanez/Tweets_Catastrophe_Classification/raw/master/Twitter_challenge.RData",
+                  "Twitter_challenge.RData")
+    load("Twitter_challenge.RData")  
+    }
+}
 
 ```
 
+\newpage
+# Introduction
+<!-- An introduction/overview/executive summary section that describes the dataset and variables, and summarizes the goal of the project and key steps that were performed. -->
+
+
+
+\newpage
+# Analysis
+<!-- A methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, any insights gained, and your modeling approach. At least two different models or algorithms must be used, with at least one being more advanced than simple linear regression for prediction problems. -->
+
+As mentioned in the Introduction, this report presents the attempt to build a machine learning model to classify Tweets in a binary model. In this particular case, the question to answer is whether those tweets correspond to a catastrophic event or not. The idea for this was taken of a Kaggle Competition for Starters ([Real or Not? NLP with Disaster Tweets]([https://www.kaggle.com/c/nlp-getting-started])). Instead of using the data provided in Kaggle, in this report the original version in [Data For Everyone](https://www.figure-eight.com/data-for-everyone/) is used.
+
+To start, let's have look at sample data:
 
 ```{r, download_source_file}
 #download data
@@ -63,8 +113,20 @@ write.csv(processed_source,"processed_source.csv")
 processed_source <-  prepare_data(source_data,profanity_clean = 1) %>% mutate(original_text=text)
 write.csv(processed_source,"processed_source_clean.csv")
 
-rm(source_data,processed_source,profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger)
+rm(profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger)
 ```
+
+```{r, show_source_data, eval=TRUE,echo=TRUE}
+source_data %>% filter(id %in% c(1,6,33,49,54,160,914,3999)) %>% standard_table(.,format="latex",caption="Sample Data")
+```
+
+
+# Results
+<!-- A results section that presents the modeling results and discusses the model performance. -->
+
+# Conclusion
+<!-- A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work. -->
+
 
 ```{r, get_domains}
 split<-200
@@ -114,28 +176,37 @@ rm(domains_list)
 ```
 
 
-
 ```{r, downlad_processed files}
 
 if(download_processed==TRUE){
 
   if(download_clean==TRUE){
     
-    source_URL <- 
-    domains_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/domains_clean.csv?token=AAAFP6MJQEF5F25AJ5T2MTK6ONYIM"
+    source_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/processed_source_clean.csv"
+    domains_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/domains_clean.csv"
     source_file <- "processed_source_clean.csv"
     domains_file <- "domains_clean.csv"
   }
   else{
-    source_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/processed_source.csv?token=AAAFP6OIRWAD3RSZUYYRYZS6ONYSS"
-    domains_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/domains.csv?token=AAAFP6P37PS7RE6JNGEXGA26ONYLK"
+    source_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/processed_source.csv"
+    domains_URL <- "https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/domains.csv"
     source_file <- "processed_source.csv"
     domains_file <- "domains.csv"
   }
+  
+  if(!file.exists(source_file)){
+    download.file(source_URL,source_file)
+  }
+  if(!file.exists(domains_file)){
+    download.file(domains_URL,domains_file)
+  }
+ 
   source_data <- read.csv(source_file, stringsAsFactors = FALSE)
   domains_data <- read.csv(domains_file, stringsAsFactors = FALSE) %>% 
                 select(link=orig_url,domain,domain_key)
-
+   
+  rm(source_URL,source_file,domains_URL,domains_file)
+   
   version_number<-as.double(version$minor)/10+as.double(version$major)
   if(version_number<3.6){
       set.seed(200)
@@ -150,16 +221,19 @@ if(download_processed==TRUE){
   test_index <- createDataPartition(y = training_test$id, times = 1, p = 0.1, list = FALSE)
   training<- training_test[-test_index,]
   test <- training_test[test_index,]
+  
+  rm(source_file,domains_file,validation_index,training_test,test_index,version_number,source_data)
+
+  extra_stop_words <- tibble(word=c("t.co","http","https","û_","amp","û","1","2","3",
+                                  "4","5","6","7","8","9","10","Ò","Ûª","ûªs","ûï","å","è",
+                                  "u0089û_"))
 
 }
 
+  
 
 
-rm(source_file,domains_file,validation_index,training_test,test_index,version_number,source_data)
 
-extra_stop_words <- tibble(word=c("t.co","http","https","û_","amp","û","1","2","3",
-                                  "4","5","6","7","8","9","10","Ò","Ûª","ûªs","ûï","å","è",
-                                  "u0089û_"))
 ```
 
 
