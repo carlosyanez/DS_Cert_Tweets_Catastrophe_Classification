@@ -20,10 +20,8 @@ always_allow_html: true
 ---
 
  <!-- To compile the report into pdf, the files header_includes.tex is require. This file is available at -->
- <!-- https://github.com/carlosyanez/Movielens-10-M-Recommendation/blob/master/header_includes.tex -->
- <!-- In addition, for faster generation, datasets have been saved into movielens.RDate available at  -->
- <!-- https://drive.google.com/open?id=1yrZ4zMqOIawRjUuLXcJz10YcBM8NnSiS  -->
-
+ <!-- https://github.com/carlosyanez/Tweets_Catastrophe_Classification/blob/master/header_includes.tex -->
+ 
 
 ```{r, setup, include=FALSE}
 #### WARNING : Running the notebook from scratch, may take SEVERAL HOURS - Run at your own time.####
@@ -46,6 +44,28 @@ knitr::opts_chunk$set(echo=FALSE,eval=eval,message=FALSE, warning=FALSE,tidy=FAL
 
 knitr::knit_hooks$set(inline = function(x) { if(!is.numeric(x)){ x }else{ prettyNum(round(x,3), big.mark=" ") } })
 
+# Load addiional packages for reporting, not included in R file
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+if(!require(plotly)) install.packages("urltools", repos = "http://cran.us.r-project.org")
+if(!require(ggrepel)) install.packages("ggrepel", repos = "http://cran.us.r-project.org")
+
+library(data.table)
+library(kableExtra)
+library(gridExtra)
+library(plotly)
+library(ggrepel)
+
+
+#Dowload Environment file, for knitting.
+if(download_rdata==TRUE){
+    if(!file.exists("Twitter_challenge.RData")){
+    download.file("https://github.com/carlosyanez/Tweets_Catastrophe_Classification/raw/master/Twitter_challenge.RData",
+                  "Twitter_challenge.RData")
+    }
+  load("Twitter_challenge.RData")  
+}
 
 # Load functions created for this excercise
 
@@ -53,30 +73,6 @@ if(!file.exists("twitter_classifier.R")){
   download.file("https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/twitter_classifier.R","twitter_classifier.R")
   }
 source("twitter_classifier.R", echo = F, prompt.echo = "", spaced = F)
-
-# Load addiional packages for reporting, not included in R file
-
-if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
-if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
-if(!require(urltools)) install.packages("urltools", repos = "http://cran.us.r-project.org")
-if(!require(plotly)) install.packages("urltools", repos = "http://cran.us.r-project.org")
-
-#functions to standardise formattings
-
-standard_table <- function(data,format="html",caption="REMEMBER TO ADD A CAPTION",position="HOLD_position"){
-  
-data  %>% kable(caption=caption,format = format, booktabs = TRUE,format.args = list(decimal.mark = '.', big.mark = " ")) %>%  kable_styling(latex_options = c(position))
-  
-}
-
-#Dowload Environment file, for knitting.
-if(download_rdata==TRUE){
-    if(!file.exists("Twitter_challenge.RData")){
-    download.file("https://github.com/carlosyanez/Tweets_Catastrophe_Classification/raw/master/Twitter_challenge.RData",
-                  "Twitter_challenge.RData")
-    load("Twitter_challenge.RData")  
-    }
-}
 
 ```
 
@@ -98,7 +94,7 @@ To start, let's have look at sample data:
 #download data
 dl <- tempfile()
 download.file("https://d1p17r2m4rzlbo.cloudfront.net/wp-content/uploads/2016/03/socialmedia-disaster-tweets-DFE.csv", dl)
-source_data <- read.csv(dl, stringsAsFactors = FALSE)
+source_data <- read_csv(dl, locale = locale(encoding = "macintosh"))
 rm(dl)
 
 #initial transformation to feed into
@@ -108,30 +104,188 @@ source_data <- source_data %>% mutate(target=ifelse(choose_one=="Relevant",1,0))
 
 #process source
 processed_source <-  prepare_data(source_data,profanity_clean = 0) 
-write.csv(processed_source,"processed_source.csv")
+write_csv(processed_source,"processed_source.csv")
 
-processed_source <-  prepare_data(source_data,profanity_clean = 1) %>% mutate(original_text=text)
-write.csv(processed_source,"processed_source_clean.csv")
+processed_source2 <-  prepare_data(source_data,profanity_clean = 1) #%>% mutate(original_text=text)
+write_csv(processed_source2,"processed_source_clean.csv")
 
-rm(profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger)
+rm(profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger,processed_source2)
+
 ```
 
-```{r, show_source_data, eval=TRUE,echo=TRUE}
-source_data %>% filter(id %in% c(1,6,33,49,54,160,914,3999)) %>% standard_table(.,format="latex",caption="Sample Data")
+```{r, show_source_data, eval=TRUE}
+
+source_data %>% filter(id %in% c(1,6,33,49,160,914,3999,7336)) %>% 
+  kable(caption="Sample Data",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  column_spec(3,width = "15em") %>%
+  kable_styling(latex_options =c("striped","hold_position","scale_down")) 
+  
+```
+
+As seen above, the dataset cointains the following observations (to match Kaggle's format):
+
+* **id** : uniqe sequential identifier.
+* **target** : indicator of whether the tweet corresponds to a catastrophic event (**1**) or not (**0**).
+* **text** : tweet, as extracted from Twitter.
+* **keyword** : search term used in Twitter's search bar to retrieve the tweets.
+* **location** : Name of the place wherre the tweet in question originated.
+
+For this report, **keyword** and **location** will be ignored, choosing to focus on the text (tweet) only. After a brief observation of its content, in this analysis the text will be divided into four component:
+
+* The text proper. i.e. the *natural language* sentence in the text. In the code, this will be called **words**. All the tweets in this file are written in English language, but they may contain non-English characters, emojis and emoticons.
+* The **hashtags**, which are in user created categorisation. This is a meaningful component of the tweet and may help clarify  whether the message is a real disaster. For example, in below tweet, the hashtag helps us to ellucidate this is  cricket commentary rather than a fire disaster:
+
+```{r, tweet_hasthag_example,eval=TRUE}
+
+source_data %>% filter(id==1674) %>% select(id,text) %>% 
+                kable(caption="Tweet about cricket",
+                      format = "latex", booktabs = TRUE,
+                      format.args = list(decimal.mark = '.',   big.mark = " ")) %>%
+                column_spec(2,width = "40em") %>%
+                kable_styling(latex_options =c("HOLD_position","scale_down")) 
+  
+```
+
+* The **links** contained in the tweet - perhaps the respective Internet domain could help distinguish "quality" disaster sources (e.g. official announcement from relevant authority, The Red Cross/Crescent) from non-disistarr ones (e.g. gossip magazine using hyperbolic language). To obtain meaningful content though, the links need to be "unshortened" from the t.co addresses provided by Twitter.
+* Who is mentioned in the tweet (by their Twitter **handles**). Similarly to the previous points, it may be useful to distinguish between people reaching out to government/emergency service from *[shock jocks](https://en.wikipedia.org/wiki/Shock_jock)* using florid language.
+
+## Processing and cleaning up the data
+
+In order to obtain the data in the desired format for analysis, the function *prepare_data* has been created. Its code performs the below activities:
+
+1. Extract hasthags, links and Twitter handles from the tweet.
+2. Clean up the remaining text, removing links and handles, and performing transformation operations on emojis,emoticons and other special characters.
+3. (Optional) Replace swear words and profane language with unique strings, in case seeing those wants to be avoided, yet retaining the words for analysis. Please note this report has been generated with the uncensored version, thus results may vary.
+4. "Unshorten" link URLs to obtain domain names of linked sources.
+
+The first step is similar for the three components - below is the code use to remove the hashtags:
+
+```{r hasthag_removal_code, echo=TRUE}
+
+ source_data$hashtag <- str_extract_all(source_data$text, "#\\S+")
+  source_data <- source_data %>% 
+    mutate(hashtag = gsub(x=hashtag, 
+           pattern = "character\\(0)", replacement = "")) %>%
+    mutate(hashtag = gsub(x=hashtag, pattern = "c\\(", replacement = "")) %>%
+    mutate(hashtag = gsub(x=hashtag, pattern = "\"", replacement = "")) %>%
+    mutate(hashtag = gsub(x=hashtag, pattern = ")", replacement = "")) %>%
+    mutate(hashtag = gsub(x=hashtag, pattern = ",", replacement = ""))
+  
 ```
 
 
-# Results
-<!-- A results section that presents the modeling results and discusses the model performance. -->
+In the following step, both links and mentions are removed, keeping the hashtags since they may also be part of the sentence in question. Then, leveraging the functions in the **[textclean](https://www.rdocumentation.org/packages/textclean/versions/0.9.3)** package, the remaining data is further normalised, by replacing :
 
-# Conclusion
-<!-- A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work. -->
+* contractions with full words,
+* emojis and emoticos with equivalent word (e.g. :) with 'smile'),
+* all non-ASCII characters wit equivalent,
+* internet slang with full words,
+* html code,
+* money symbols,
+* numbers with full words,
+* ordinals with full words replace_ordinal,
+* timestamps.
 
+The code that achieves this is shown below:
 
-```{r, get_domains}
+```{r, text_cleaning, echo=TRUE}
+
+ #remove mentions and links from text, save original text in different observation
+  
+   source_data$original_text <- source_data$text
+   source_data <- source_data %>% 
+    mutate( text = gsub(x = text, pattern = "#", replacement = ""))  %>%
+    mutate( text = gsub(x = text, pattern = "@\\S+", replacement = "")) %>%
+    mutate(text = gsub(x=text, 
+                       pattern = "(s?)(f|ht)tp(s?)://\\S+\\b", 
+                       replacement = "")) 
+  
+#further clean text with textclean package
+  
+  source_data$text<-replace_contraction(source_data$text)
+  source_data$text<- replace_emoji(source_data$text)
+  source_data$text<- replace_emoticon(source_data$text)
+  source_data$text<-replace_non_ascii(source_data$text,impart.meaning=TRUE)
+  source_data$text<-replace_internet_slang(source_data$text)
+  source_data$text<-replace_html(source_data$text)
+  source_data$text<-replace_money(source_data$text)
+  source_data$text<-replace_number(source_data$text)
+  source_data$text<-replace_ordinal(source_data$text)
+  source_data$text<-replace_time(source_data$text)
+  
+```
+
+An optional step is to remove swear and profane vocabulary from the text, in case that is desired. This has been done through the below code:
+
+```{r, profanity_removal, echo=TRUE}
+  #profanity removal
+  
+  if(profanity_clean==1){
+    
+    #download profane words and prep for matching
+    data(profanity_zac_anger)
+    data(profanity_alvarez)
+    data(profanity_arr_bad)
+    data(profanity_banned)
+    data(profanity_racist)
+    Sys.sleep(100)
+    
+    special_chars <- as_tibble(c("\\!", "\\@",  "\\#","\\$", "\\&","\\(","\\)",
+                                 "\\-","\\‘","\\.","\\/","\\+",'\\"','\\“'))
+    special_chars$replacement <- paste0("st",
+                                        stri_rand_strings(nrow(special_chars),
+                                        3, '[a-zA-Z0-9]'))
+    
+    profanity<-as_tibble(c(profanity_zac_anger,profanity_alvarez,
+                           profanity_arr_bad,profanity_banned,
+                           profanity_racist))
+    profanity<-unique(profanity)
+    profanity$replacement <- paste0("pr",
+                                    stri_rand_strings(nrow(profanity), 
+                                    7, '[a-zA-Z0-9]'))
+    
+    for(i in 1:nrow(special_chars)){
+      profanity <- profanity %>% 
+        mutate(value=gsub(special_chars[i,]$value, special_chars[i,]$replacement,
+                          value))
+    }
+    profanity <- profanity%>% mutate(value=paste0('\\b', value, '\\b'))
+    
+    rm(profanity_zac_anger,profanity_alvarez,profanity_arr_bad,
+       profanity_banned,profanity_racist)
+    
+    #clean up profane words, replace by random string
+    
+    for(i in 1:nrow(special_chars)){
+      twitter_df <- twitter_df %>% 
+        mutate(text=gsub(special_chars[i,]$value,
+                         special_chars[i,]$replacement,
+                         text))
+    }
+    
+    for(i in 1:nrow(profanity)){
+      twitter_df <- twitter_df %>% 
+        mutate(text=gsub(profanity[i,]$value,
+                         profanity[i,]$replacement,
+                         text,ignore.case = TRUE))
+    }
+     
+    
+    twitter_df <- twitter_df %>% 
+      mutate(text=gsub("st[a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9]",
+                       "",text,ignore.case = TRUE))
+ 
+    rm(profanity,special_chars)
+  }
+```
+
+As a last step, the functions XXX from the YYY package has been leveraged to unshorten the t.co URLS, to obtain the domains of the links. This is done trough the below code:
+
+```{r, get_domains, echo=TRUE}
+
 split<-200
 value <- round(nrow(processed_source)/split,0)
-
 segments <- tibble(start=integer(),end=integer())
 segments <- add_row(segments, start=1,end=value)
 
@@ -139,7 +293,8 @@ for(i in 2:(split-1)){
    segments <- add_row(segments, start=value*(i-1)+1,end=i*value)
 }
 
-   segments <- add_row(segments, start=value*(split-1)+1,end=nrow(processed_source))
+   segments <- add_row(segments, start=value*(split-1)+1,
+                       end=nrow(processed_source))
 
 # first segment
    segment <- processed_source[segments[1,]$start:segments[1,]$end,]
@@ -154,10 +309,14 @@ for(i in 179:split){
 }      
 
 domains <-  domains %>% 
-    mutate(domain = gsub(x=expanded_url, pattern = "(http|ftp|https)://",replacement = "")) %>%
-    mutate(domain = gsub(x=domain, pattern = "www.", replacement = "")) %>%
-    mutate(domain = gsub(x=domain, pattern = "ww[0-9].", replacement = "")) %>%
-    mutate(domain = gsub(x = domain, pattern = "/S+", replacement = ""))
+    mutate(domain = gsub(x=expanded_url, 
+                         pattern = "(http|ftp|https)://",replacement = "")) %>%
+    mutate(domain = gsub(x=domain, 
+                         pattern = "www.", replacement = "")) %>%
+    mutate(domain = gsub(x=domain, 
+                         pattern = "ww[0-9].", replacement = "")) %>%
+    mutate(domain = gsub(x = domain, 
+                         pattern = "/S+", replacement = ""))
 
 domains$domain <- domain(domains$expanded_url)
 domains <-  domains %>% 
@@ -168,12 +327,47 @@ domains <-  domains %>%
 domains_list <- domains %>% select(domain) %>% unique(.)
 domains_list$domain_key <- paste0("domain_",seq.int(nrow(domains_list)))
 domains <- domains %>% left_join(domains_list,by="domain")
-write.csv(domains,"domains.csv")
-domains_sanitised <- domains %>% select(orig_url,domain=domain_key)
-write.csv(domains_sanitised,"domains_clean.csv")
+```
 
+```{r, save_domains}
+write_csv(domains,"domains.csv")
+domains_sanitised <- domains %>% select(orig_url,domain=domain_key)
+write_csv(domains_sanitised,"domains_clean.csv")
 rm(domains_list)
 ```
+
+As result of this processing, we have two data frames to use for further analysis: one with the processed tweets and another with a list of t.co URLs and domains. A sample of boths is shown below:
+
+```{r, show_processed_data, eval=TRUE}
+
+processed_source %>% filter(id %in% c(1,6,33,49,160,914,3999,7336)) %>% 
+  select(id,target,text,hashtag,link,mention) %>%
+  kable(caption="Sample Data",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  column_spec(3,width = "15em") %>%
+  kable_styling(latex_options =c("striped","hold_position","scale_down")) 
+  
+```
+
+
+```{r, show_domains_data,eval=TRUE}
+  domains_data %>% mutate(id=seq.int(nrow(domains_data))) %>% 
+  filter(id %in% c(1,2,37,39,208,211,512,513)) %>%  select(-id) %>%
+  kable(caption="Sample Data",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","hold_position")) 
+  
+```
+
+Both datasets in their "uncensored" and "sanitised" versions have been made available on [GitHub](https://github.com/carlosyanez/Tweets_Catastrophe_Classification).
+
+Before proceeding, we will split this data into three datasets:
+
+* a **training** dataset, to be used for further analysis, modelling and tuning.
+* a **testing** dataset, to be used in tuning.
+* a **validation** dataset, which will put aside and only use at the end to generate the last results.
+
+Unless said otherwise all the below analysis has been done with the **training** dataset only!
 
 
 ```{r, downlad_processed files}
@@ -201,8 +395,8 @@ if(download_processed==TRUE){
     download.file(domains_URL,domains_file)
   }
  
-  source_data <- read.csv(source_file, stringsAsFactors = FALSE)
-  domains_data <- read.csv(domains_file, stringsAsFactors = FALSE) %>% 
+  source_data <- read_csv(source_file)
+  domains_data <- read_csv(domains_file) %>% 
                 select(link=orig_url,domain,domain_key)
    
   rm(source_URL,source_file,domains_URL,domains_file)
@@ -219,214 +413,542 @@ if(download_processed==TRUE){
   validation <- source_data[validation_index,]
 
   test_index <- createDataPartition(y = training_test$id, times = 1, p = 0.1, list = FALSE)
-  training<- training_test[-test_index,]
-  test <- training_test[test_index,]
+  training0<- training_test[-test_index,]
+  test0 <- training_test[test_index,]
   
   rm(source_file,domains_file,validation_index,training_test,test_index,version_number,source_data)
 
-  extra_stop_words <- tibble(word=c("t.co","http","https","û_","amp","û","1","2","3",
-                                  "4","5","6","7","8","9","10","Ò","Ûª","ûªs","ûï","å","è",
-                                  "u0089û_"))
 
 }
 
-  
-
-
+extra_stop_words <- tibble(word=c("t.co","http","https","û_","amp","û","1","2","3",
+                                  "4","5","6","7","8","9","10","Ò","Ûª","ûªs","ûï","å","è",
+                                  "u0089û_"))
 
 ```
 
 
+## Scoring each tweet.
 
-```{r}
-training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+In order to use a machine learning method that allows us to determine whether any relationship between the content of each tweet and its target status, we need to be able to generate a function that rates each piece of content. A way of do this is to generate a numeric value for each tweet, that then can be used for estimate whether it is "catastrophic" or not.
+
+In the case with text, a simple way to achieve this is to assign each constituent word a score and then use those to calculate a sentence value (with a simple way of calculating such value being adding to individual scores). The following lines explain the way this was done in this particular exercise - please note that as a starting point, we are making them assumption this is a good method - how to determine the right formula is a problem by itself.
+
+Taking the each tweets processed text, the first step is to "tokenise" this dataset, i.e. split it in its component words - for this the function *unnest_tokens* from the *tidytext* package has been used. Since we would like to know how this words are split between catasthropic ("positive") and non-catastrophic ("negative") entries and perhaps use this a scoring base, we will also remove "stop words" (common words such as "and" "or", basic verbs,etc), we will filter them using the *stop_words* dataset available on *tidytext*.
+
+The code to achieve this goes as follows:
+
+```{r unnest_sample, echo=TRUE}
+
+  data("stop_words")
+  extra_stop_words$lexicon <- "EXTRA"
+  stop_words<-rbind(stop_words,extra_stop_words)
+  rm(extra_stop_words)
+  
+ 
+  tokenised_words <- training_dataset %>% unnest_tokens(word,text)
+  tokenised_words <- output$tokenised_words %>%
+                            anti_join(stop_words, by="word") 
+```
+
+With the data, we can calculate how frequent each word is, in general and in both positive and negative tweets. The chart below shows this, highlighting some selected words for analysis:
+
+```{r word_numbers, eval=TRUE}
+selected_words<- c("tongue","typhoon","suicide","fires","body","laughing","survive",
+                   "shoulder","song","wrapped","tonight","property","disaster","hiroshima","cnn",
+                   "wildfire","yellow","worse","volcano","response","weird","antebellum")
+
+training_tokenised <-tokenise_data(training0,stop_words,domains_data,training_flag=TRUE) 
+
+p<- training_tokenised$tokenised_words %>% group_by(word) %>%
+  summarise(positives=sum(target==1), negatives=sum(target==0)) %>% ungroup() %>%
+  ggplot(aes(negatives,positives)) +
+  geom_point(data=(. %>% filter(!(word %in% selected_words))),
+             color='grey',fill='grey',size=4,aes(text = paste("Word:", word))) +
+  geom_point(data=(. %>% filter(word %in% selected_words)),
+             color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
+  theme(legend.position="bottom") +
+  labs(title="Positive and Negative Ocurrences for each Word (logaritmic scale)",y="Positives", x = "Negatives") +
+  theme_grey() +
+  geom_abline(color = "gray40", lty = 2)  +
+  geom_text_repel(aes(label=ifelse((word %in% selected_words),as.character(word),'')),
+            hjust=0,vjust=0,
+            nudge_x = 0.02,
+            nudge_y = 0.02,
+            color="black",size=5) +
+  scale_x_log10() +
+  scale_y_log10()
+
+p
+rm(p)
+```
+
+Since we are looking at the impact of the word for a tweet being positive, the above chart can be reduced to one indicator, the proportion each words appears positive tweets against its total number of appearances.
+
+From here, the question is how to take this into a score for each word that:
+
+* Properly weighs "disaster" related words.
+* Penalises "non disaster" words but without reducing the impact of more ambivalent terms.
+* Allows to establish a clear division, so when compoundend it clearly helps to distinguish positives from negatives.
+
+After thinking how to achieve this objective, a score was defined taken angle of each point in the avoid chart, being this an effective measure of how "positive" or "negative" a word is. If we call this angle $\theta$, we can generate an initial score that looks like the below chart:
+
+
+```{r theta_chart, eval=TRUE}
+
+scores1 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,0,0))
+
+p<- scores1$words %>%
+  ggplot(aes(pos_proportion,theta_nn)) +
+  geom_point(data=(. %>% filter(!(word %in% selected_words))),
+             color='grey',fill='grey',size=4,aes(text = paste("Word:", word))) +
+  geom_point(data=(. %>% filter(word %in% selected_words)),
+             color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
+  theme(legend.position="bottom") +
+  labs(title=" Positive Proportion vs theta",x="Positive Proportion", y = "theta") +
+  theme_grey() +
+  geom_abline(color = "gray40", lty = 2)  +
+  geom_text_repel(aes(label=ifelse((word %in% selected_words),as.character(word),'')),
+         #   hjust=0,vjust=0,
+            nudge_x = 0.02,
+            nudge_y = 0.003,
+            color="black",size=3)
+
+p
+#for interactive version
+#ggplotly(p)
+rm(p)
+```
+
+
+Although this is a good approach, after several iterations the following formula has been chosen instead:
+
+$$pre\_score = sin(pos\_proportion)^{\lambda_1}*\frac{\theta}{90 \si{\degree} }$$
+
+$$score = \frac{pre\_score}{max(pre\_score)} - \lambda_2$$
+where
+* $pos\_proportion$: Proportion of times where word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
+* $\lambda_1$: Parametrisation parameter, used to modulate the effect of less relevant words.
+* $\theta$: angle of vector $(positive\_proportion,negative\_proportion)$, as discussed previously. 
+* $\lambda_2$: Offset to potentially give a negative value to less relevant words, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant words. This will be treated as a tuning parameter.
+
+Setting $\lambda_1$ to 1 and $\lambda_2$, we have a sample distribution, as follows:
+
+```{r, scores_sample_0, eval=TRUE}
+p<- scores1$words %>%
+  ggplot(aes(pos_proportion,score)) +
+  geom_point(data=(. %>% filter(!(word %in% selected_words))),
+             color='grey',fill='grey',size=4,aes(text = paste("Word:", word))) +
+  geom_point(data=(. %>% filter(word %in% selected_words)),
+             color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
+  theme(legend.position="bottom") +
+  labs(title=" Positive Proportion vs Score",x="Positive Proportion", y = "Score") +
+  theme_grey() +
+  geom_abline(color = "gray40", lty = 2)  +
+  geom_text_repel(aes(label=ifelse((word %in% selected_words),as.character(word),'')),
+            hjust=0,vjust=0,
+            nudge_x = 0.02,
+            nudge_y = -0.03,
+            color="black",size=3)
+
+p
+rm(p,scores1)
+```
+
+Looking at the chart above, we have achieve the objectives of giving distinct scores depending on the apparent "catastrophe" value of each word. This however, does not reflect the amount of times a word appears - it may be the case that a particular term appears just one and gets an extreme score which is not really a good indicator of its real "catastrophe value. Thus, a last modification of the formula es required:
+
+$$score = 
+ \begin{cases} 
+      \emptyset & n \leq \lambda_3 \\
+      \frac{pre\_score}{max(pre\_score)} - \lambda_2 & n > \lambda_3
+   \end{cases}$$
+
+where
+* $n$ : number of times the word is appears in the training set,
+* $\lambda_3$: arbitrary theshold to filter word with a low number of ocurrences (and possibly biased). This is a tuning parameter.
+
+Using $\lambda_3=10$ for illustration purposes, we have the below chart:
+
+```{r, scores_sample_1, eval=TRUE}
+scores1 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,0,0))
+scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,0))
+
+scores1 <- scores1$word %>% anti_join(scores2$word, by="word") %>% mutate(score=0)
+
+p<- scores2$words %>%
+  ggplot(aes(pos_proportion,score)) +
+  geom_point(data=(. %>% filter(!(word %in% selected_words))),
+             color='grey',fill='grey',size=4,aes(text = paste("Word:", word))) +
+  geom_point(data=(. %>% filter(word %in% selected_words)),
+             color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
+   geom_point(data=(scores1 %>% filter(!(word %in% selected_words))),
+             color='grey',fill='grey',size=4,aes(text = paste("Word:", word))) +
+    geom_point(data=(scores1 %>% filter((word %in% selected_words))),
+             color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
+  theme(legend.position="bottom") +
+  labs(title=" Positive Proportion vs Score - n>10 - empty shown as 0 ",x="Positive Proportion", y = "Score") +
+  theme_grey() +
+  geom_abline(color = "gray40", lty = 2)  +
+  geom_text_repel(aes(label=ifelse((word %in% selected_words)&(pos_proportion>0.2),as.character(word),'')),
+            direction="x",
+            force=30,
+          #  hjust=0,vjust=0,
+           nudge_x = 0.002,
+          #  nudge_y = -0.003,
+            color="black",size=3) +
+  geom_text_repel(aes(label=ifelse((word %in% (selected_words[which(selected_words=="song")]))&(pos_proportion<=0.2),as.character(word),'')),
+            direction="y",
+            force=50,
+          #  hjust=0,vjust=0,
+            nudge_x = 0.002,
+            nudge_y = 0.0003,
+            color="black",size=3) +
+    geom_text_repel(data=scores1,aes(label=ifelse((word %in% selected_words),as.character(word),'')),
+            direction="y",
+            force=4,
+           # hjust=0,vjust=0,
+            nudge_x = 0.02,
+          #  nudge_y = 0.003,
+            color="black",size=3)
+
+p
+#ggplotly(p)
+
+rm(p,scores1,scores2)
+```
+
+
+With a set of scores, we would like to know if this produce a set of tweet scores that are a potential good input for a regression function. Due its simplicity, if we using a sum to calculate a score per tweet we can obtain those values with the below code:
+
+```{r calculate_score, echo=TRUE}
+
+   tweet_score <- tokenised_words %>% 
+                 left_join(word_scores,by="word") %>% filter(!is.na(score)) %>%
+                 group_by(id) %>% summarise(word_score=sum(score)) %>% 
+                 ungroup()
+```
+
+
+wich, will produce results like the below graphs (for different offset values):
+
+
+```{r tweet_scores, eval=TRUE}
+offset<-0
+scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
+scores3<-score_tweets(training0,training_tokenised,scores2) 
+p1<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  theme_grey()
+offset<-0.2
+scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
+scores3<-score_tweets(training0,training_tokenised,scores2) 
+p2<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  theme_grey()
+offset<-0.4
+scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
+scores3<-score_tweets(training0,training_tokenised,scores2) 
+p3<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  theme_grey()
+offset<-0.6
+scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
+scores3<-score_tweets(training0,training_tokenised,scores2) 
+p4<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  theme_grey()
+
+grid.arrange(p1, p2,p3,p4, nrow=2)
+
+rm(score2,score3,offset,p1,p2,p3,p4)
+```
+
+From the above, we can see that there is a diffuse division between positive and negative tweets. It is worth noticing this could potentially be improved with better modelling - however this could a problem but itself and the above - with tuning - is deemed acceptable for a first approximation. 
+
+A similar process has been done two create tweet scores for hasthags, links(or rather the domains of the unshorten URLs) and mentions. After try and error, a slightly different formula has been chosen for these three observations, represented below for hasthags:
+
+$$pre\_score= \left( \frac{pos\_proportion}{\lambda_1} \right)^{\lambda_{2}} \cdot \frac{\theta}{90}$$
+$$ score =
+            \begin{cases}
+            \emptyset & n \leq \lambda_4 \\
+            \frac{pre\_score}{max(pre\_score)}  - \lambda_3 & n > \lambda_4 \\
+            \end{cases}$$
+
+where 
+
+* $pos\_proportion$ is the proportion of the term in the entire corpus of positive hasthags/domains/mentions,
+* $\lambda_1$ tuning parameter that re-scales - everything above the threshold is relevant, the rest not so much,
+* $\lambda_2$ tuning parameter to weigh down irrelavent terms and weigh up relevent ones,
+* $\theta$ angle of vector $(negatives,positives)$,
+* $\lambda_3$, Offset to potentially give a negative value to less relevant term, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant term This will be treated as a tuning parameter.
+* $\lambda_4$, threshold of number of ocurrences necessary to consider the score as valid.
+
+
+The below charts show an example of score generated using this method:
+
+
+```{r other_scores, eval=TRUE}
+
+scores2 <-calculate_scores(training_tokenised,
+                           word_parameters=c("sin",1,0,10,0),
+                           hashtag_parameters=c("sin",4,0.5,0),
+                           handle_parameters=c("sin",4,0.5,0),
+                           link_parameters=c("sin",4,0.5,0))
+
+scores3<-score_tweets(training0,training_tokenised,scores2) 
+
+p1<- scores3$vector %>% filter(!is.na(hashtag_score)) %>%
+  ggplot(aes(id,hashtag_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Hasthag Score"),x="id", y = "Score") +
+  theme_grey()
+p2<- scores3$vector %>% filter(!is.na(link_score)) %>%
+  ggplot(aes(id,hashtag_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Link Score"),x="id", y = "Score") +
+  theme_grey()
+p3<- scores3$vector %>% filter(!is.na(handle_score)) %>%
+  ggplot(aes(id,hashtag_score,color=target)) +geom_point() + theme(legend.position="bottom") +
+  labs(title=paste("Mention/Handle Score"),x="id", y = "Score") +
+  theme_grey()
+
+grid.arrange(p1,p2,p3,ncol=2)
+rm(p1,p2,p3,scores2,scores3)
+```
+
+
+In order to facilitate the next steps, the above process has been written into three functions, namely:
+
+* **tokenise_data**, which takes the data in the pre-processed format and generates a dataframes with the token words, hasthags, domains and Twitter handles.
+* **calculate_scores**,which takes the output of the previous function (*tokenised* data) and calculate the scores for each word, hashtag, link and handle. All the previously discussed tuning parameter have been defined as inputs for this function.
+* **score_tweets**, which will generate a score for earch tweeet for each of categories previously mentioned.
+
+All these functions are written in the accompanying .R file, with inline commentary explaining all the steps involved in the process.
+
+## Finalising the model and data quality.
+
+From here, we can move to the next step and to generate the last part of the model - the one that will render a prediction.
+
+Considering the work done so far, there are potentially many ways to use to the scores to create a model for prediction. After weighing the options, the following two-step approach will used:
+
+1. First, a regression algorithm will be used to train a model for each attribute - i.e. 4 different predictions will be generated using each of the 4 scores previously created independently. The result of this process will be vector for each tweet, with the results of each prediction (1,0 or potentially N/A if there is no such attribute for a given tweet.)
+2. Then this vector will be used again as a input of a second machine learning method , which will attempt to predict the target result based on the individual responses.
+
+For this process, two functions have been written in this report .R file:
+
+* **fit_model**, which is the training function. Its inputs are the scores plus relevant tuning parameters. It will output 5  machine learning models (for each attribute plus the aggregate one).
+* **predict_values**, which will take the training score, the test data and the models previously generated. it will output the predictions and measure accuracy if the target value is provided.
+
+These functions leverage the caret package and they have been written to provide some flexibility - for example **fit_model** allows to be run using different machine learning models. For further details, please refer to the detailed commentary in the .R file.
+
+For the initial run - that will help us establish and initial benchmark - the general linear model ([glm]()) in caret is used for the indidivual predictions. For the aggregate preidction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
+
+
+```{r first_predictio, eval=TRUE}
+
+training_tokenised <- tokenise_data(training0,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
                              word_parameters=c("sin",1,0,10,0),
                              hashtag_parameters=c("exp",4,0.5,3),
                              handle_parameters=c("exp",4,0.5,4),
                              link_parameters=c("exp",4,0.75,4))
-```
-
-```{r}
-p <- scores$words %>% ggplot(aes(x=pos_proportion,y=score,
-                          size=n)) +
-  geom_point(aes(text = paste("Word:", word))) +
-  geom_abline(color = "gray40", lty = 2) # +
-#  scale_x_log10(labels = percent_format()) +
-#  scale_y_log10(labels = percent_format())
-
-ggplotly(p)
-rm(p)
-```
-
-
-```{r}
-training_vector <- score_tweets(training,training_tokenised,scores) 
-training_vector$vector %>% left_join(training,by="id") %>%
-  filter(type=="none") %>% select(text)
-```
-
-
-```{r}
+training_vector <- score_tweets(training0,training_tokenised,scores) 
 fitting_model <- fit_model(training_vector)
+results_1<-predict_values(test0,fitting_model,scores,extra_stop_words,domains_data)
+```
+
+The accuracy for table and confusion matrix for this example are:
+
+```{r fp_acc,eval=TRUE}
+results_1$eval %>%
+  kable(caption="Initial results",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","hold_position")) 
+
+results_comparison <- tibble(attempt=numeric(),accuracy=numeric())
+results_comparison <- add_row(results_comparison,
+                              attempt="Initial training",
+                              accuracy=results_1$eval[which(results_1$eval$eval=="aggregate"),]$result_method)
 ```
 
 
-```{r}
-results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
-results$eval
+```{r confusion_matrix0,eval=TRUE}
+results_1_cm <- confusionMatrix(results_1$results$target,results_1$results$aggregate)
+results_1_cm$table %>%
+  kable(caption="Initial results - Confusion Matrix",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("hold_position")) 
+rm(results_1_cm)
 ```
 
+As observed, there are large number of false positives and false negatives. A sample of those is provided below:
 
-```{r}
-results$results_extended %>% filter(category == "TP") %>% select(original_text)
-```
-
-```{r}
-results$results_extended %>% filter(category == "TN") %>% select(original_text)
-
-```
-
-
-
-```{r}
-results$results_extended %>% filter(category == "FP") %>% select(original_text)
-
-```
-
-
-```{r}
-results$results_extended %>% filter(category == "FN") %>% select(original_text)
+```{r result_1_FP,eval=TRUE}
+results_1$results_extended %>% filter(category == "FP") %>% select(id,target,original_text) %>%
+ filter(id %in% c(368,744,1699,1716,4385,9435,9641))%>% 
+  kable(caption="Initial results - False Positives",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  column_spec(3,width = "40em") %>%
+  kable_styling(latex_options =c("striped","HOLD_position")) 
 
 ```
 
+```{r result_1_FN,eval=TRUE}
 
-```{r}
-write.csv(results$results_extended,"results1.csv")
+results_1$results_extended %>% filter(category == "FN") %>% select(id,target,original_text) %>% 
+   filter(id %in% c(351,2160,2817,4173,4614,4721,7214)) %>%
+  kable(caption="Initial results - False Negatives",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  column_spec(3,width = "40em") %>%
+  kable_styling(latex_options =c("striped","HOLD_position")) 
+
 ```
 
+A more detailed review of both sets, seems to indicated that the source file curation does seem to contain some errors : tweets that are seemingly not a catastrophe are tagged as such and vicerversa. One particular example of this are tweets allusive to the Hiroshima bombing in World War 2. Although those tweets a tragedy remembrance and do not carry the connotation of a current catastrophe, there are marked as "disaster" in the dataset.
 
-```{r}
+```{r hiroshima_tweets,eval=TRUE}
+results_1$results_extended %>% filter(grepl("Hiroshima",text)) %>% select(id,target,original_text)  %>%
+  kable(caption="Initial results - Hiroshima Tweets",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  column_spec(3,width = "40em") %>%
+  kable_styling(latex_options =c("stripped","HOLD_position")) 
+```
+
+The above reflects two important problems with machine learning and natural language:
+
+1. This re-enforces that quality training data is essential. Bad data will probably result in bad results - even with a very sophisticated algorithm (It's called *Data* Science after all!).
+2. Human language is complicated. Meaning of each word is highly contextual and changes depending on the register, dialect and over time. This can be difficult for a machine learning model to **grasp**.
+
+To illustrate the second point, the above false positives and false negatives have been manually review and their new positive/negative result has been modified accordingly and added into the original data set. After feeding them back into the trainig dataset, selecting a new testing sample and running the machine learning model again, the below results are obtained:
+
+```{r corrected_results0}
 corrections <- "target_corrected.csv"
+manual_scores <- "manual_scores.csv"
 
-corrected_data <- read.csv(corrections, stringsAsFactors = FALSE)
-initial_results <- results$results_extended
+if(!file.exists(corrections)){
+  download.file("https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/twitter_classifier.R","twitter_classifier.R")
+  }
+
+if(!file.exists(manual_scores)){
+  download.file("https://raw.githubusercontent.com/carlosyanez/Tweets_Catastrophe_Classification/master/twitter_classifier.R","twitter_classifier.R")
+}
+
+corrected_data <- read_csv(corrections)
+manual_scores <-  read_csv(manual_scores)
+initial_results <- results_1$results_extended
 
 initial_results <- initial_results %>% left_join(corrected_data,by="id") %>% 
   mutate(target=ifelse(is.na(target_corrected),target,target_corrected)) %>% 
   select(id,target,text,keyword,location,hashtag,link,mention,original_text)
-initial_results$X <-1
 
-```
-
-
-
-```{r}
 version_number<-as.double(version$minor)/10+as.double(version$major)
 if(version_number<3.6){
   set.seed(200)
 }else{
     set.seed(200, sample.kind="Rounding")
 }
-training_old <-training
+training_old <-training0
 test_index <- createDataPartition(y = training_old$id, times = 1, p = 0.12, list = FALSE)
 training<- training_old[-test_index,]
 test <- training_old[test_index,]
 
 training <- rbind(training,initial_results)
+```
+
+```{r corrected_results1}
+training_tokenised$tokenised_handles <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores$hashtags<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,10,0),
+                             hashtag_parameters=c("exp",4,0.5,3),
+                             handle_parameters=c("exp",4,0.5,4),
+                             link_parameters=c("exp",4,0.75,4))
+training_vector <- score_tweets(training,training_tokenised,scores) 
+fitting_model <- fit_model(training_vector)
+results_2<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+
 rm(training_old,version_number)
 ```
 
+```{r fp_acc0,eval=TRUE}
+results_2$eval %>%
+  kable(caption="Initial results - corrected dataset",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","hold_position")) 
 
+results_comparison <- add_row(results_comparison,
+                              attempt="Initial training - Data Correction",
+                              accuracy=results_2$eval[which(results_3$eval$eval=="aggregate"),]$result_method)
+```
 
+This illustrates that better training data can lead to better results. It is also worth noticing this may well reflect a real-life scenario, where a social media monitoring centre is constantly reviewing false negatives and false negatives with the purpose of keep re-training a model to adapt to changes language, emerging events, etc.
+
+Of course, the other components in the model can also benefit of this *curated* approach. In this report, and for illustraition process - the  list of hasthags in thre training set has been reviewed and then detected a couple of hashtags that most probably mean catasthrophe (e.g. like #earthquake most like means one) and other most probably won't (like #ashes2017, which is unmistakebly cricket, not matter how colourful and hiperbolic is language).
+
+Using a sample set of curated hashtag, it is possible to observe a small increment in accuracy. Handles and links will be left as a action to improve for the time being.
 
 ```{r}
-training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
                              word_parameters=c("sin",1,0,10,0),
                              hashtag_parameters=c("exp",4,0.5,3),
                              handle_parameters=c("exp",4,0.5,4),
-                             link_parameters=c("exp",4,0.75,4))
+                             link_parameters=c("exp",4,0.75,4),
+                            manual_scores = manual_scores)
 training_vector <- score_tweets(training,training_tokenised,scores) 
 fitting_model <- fit_model(training_vector)
-results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
-results$eval
-
+results_3<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
 ```
 
 
-```{r}
-results$results_extended %>% filter(category == "FN") %>% select(original_text)
-write.csv(results$results_extended,"results2.csv")
+```{r fp_acc3,eval=TRUE}
+results_3$eval %>%
+  kable(caption="Initial results",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","hold_position")) 
 
+results_comparison <- add_row(results_comparison,
+                              attempt="Curated hashtags",
+                              accuracy=results_3$eval[which(results_3$eval$eval=="aggregate"),]$result_method)
+```
+
+Looking at the work done so far, we have the below table showing the improvements obtained by improving and supplementing the data:
+
+```{r results_comparison_1}
+results_comparison %>%
+  kable(caption="Initial Comparison",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","hold_position")) 
 ```
 
 
-```{r}
-corrections <- "target_corrected.csv"
+## Tuning
 
-corrected_data <- read.csv(corrections, stringsAsFactors = FALSE)
-second_results <- results$results_extended
+With this new, "augmented" dataset the next step of the process is to tune the model. Looking at how the model it's constructed, there are *many* aspects to tune, namely:
 
-second_results <- initial_results %>% left_join(corrected_data,by="id") %>% 
-  mutate(target=ifelse(is.na(target_corrected),target,target_corrected)) %>% 
-  select(id,target,text,keyword,location,hashtag,link,mention,original_text)
-second_results$X <-1
+* The parameters used to calculate the tweet, hasthag, link and mention scores.
+* The selection of classification algorithms used.
+* The tunning parameters of each selection algorithm.
 
-second_results <- rbind(second_results,initial_results)
+Obviously, tuning every single parameter will result in quite a lengthy excercise. Instead, this report will focus on some of the key components in this model and discus what works and what else could be done.
 
-version_number<-as.double(version$minor)/10+as.double(version$major)
-if(version_number<3.6){
-  set.seed(200)
-}else{
-    set.seed(200, sample.kind="Rounding")
-}
-training_old <-training %>% filter(!(id %in% second_results$id))
-test_index <- createDataPartition(y = training_old$id, times = 1, p = 0.15, list = FALSE)
-training<- training_old[-test_index,]
-test <- training_old[test_index,]
+The first aspect to tune is the each word in the training corpus gets a indvidual score. This is perhaps the key component of the model. From the previous section, we have that this score is calculated through the below formulas:
 
-training <- rbind(training,initial_results)
-rm(training_old,initial_results,second_results,version_number,test_index)
-```
+$$pre\_score = sin(pos\_proportion)^{\lambda_1}*\frac{\theta}{90 \si{\degree} }$$
+$$score = 
+ \begin{cases} 
+      \emptyset & n \leq \lambda_3 \\
+      \frac{pre\_score}{max(pre\_score)} - \lambda_2 & n > \lambda_3
+   \end{cases}$$
+  
 
+where
+* $pos\_proportion$: Proportion of times where word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
+* $\lambda_1$: Parametrisation parameter, used to modulate the effect of less relevant words.
+* $\theta$: angle of vector $(positive\_proportion,negative\_proportion)$, as discussed previously. 
+* $\lambda_2$: Offset to potentially give a negative value to less relevant words, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant words. This will be treated as a tuning parameter.
+* $n$ : number of times the word is appears in the training set,
+* $\lambda_3$: arbitrary theshold to filter word with a low number of ocurrences (and possibly biased). This is a tuning parameter.
 
+In this report, $\lambda_2$ and $\lambda_3$ will be tuned, to see how the penalisation of irrelevant words and minimum number of ocurrences affect the model. The results of tuning lambda_2 are shown below.
 
-
-```{r}
-training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
-scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0),
-                             hashtag_parameters=c("exp",4,0.5,3),
-                             handle_parameters=c("exp",4,0.5,4),
-                             link_parameters=c("exp",4,0.75,4))
-training_vector <- score_tweets(training,training_tokenised,scores) 
-fitting_model <- fit_model(training_vector)
-results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
-results$eval
-```
-
-
-```{r}
-training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
-scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.2),
-                             hashtag_parameters=c("exp",4,0.5,3),
-                             handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
-training_vector <- score_tweets(training,training_tokenised,scores) 
-fitting_model <- fit_model(training_vector)
-results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
-results$eval
-```
-
-
-```{r}
-results$results_extended %>% filter(category=="FP") %>% select(original_text,word_score,link_score)
-```
-
-
-```{r}
+```{r word_lambda_2_tuning}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 
 range <- seq(0,0.5,0.05)
@@ -436,7 +958,8 @@ for (i in range){
                              word_parameters=c("sin",1,0,10,i),
                              hashtag_parameters=c("exp",4,0.5,3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
                     training_vector <- score_tweets(training,training_tokenised,scores) 
                     fitting_model <- fit_model(training_vector)
                     results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
@@ -445,26 +968,43 @@ for (i in range){
                     stats <- add_row(stats,parameter=i,accuracy=acc,word_accuracy=w_acc)
                   }
 
-
-stats
 stats_1 <-stats
 rm(range,acc,w_acc,stats)
 ```
 
 
+```{r  word_lambda_2_tuning_results,eval=TRUE}
+stats_1 %>% ggplot(aes(parameter,accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(data=(. %>% filter(accuracy == stats_1[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Word Score - lambda_2 tuning",x="lambda_2", y = "Accuracy") +
+  theme_grey() 
+
+word_lambda_2 <- stats_1[which.max(stats_1$accuracy),]$parameter
+results_comparison <- add_row(results_comparison,
+                              attempt="Optimised word score - lambda_2",
+                              accuracy=stats_1[which.max(stats_1$accuracy),]$accuracy)
+
+```
+
+As shown above, the best result is obtained with $lambda_2$=`r word_lambda_2`. It is also worth noticing that increasing this value won't necessarily result in better results, since it will then penalise "neutral" terms too.
+
+With this value, we will then also find if there is an optimal $\lambda_3$, i.e. to see if removing the words that appear seldomly have an negative impact in the model. The results are shown below:
 
 
-```{r}
+```{r word_lambda_3_tuning}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 
 range <- seq(0,30,1)
 stats <- tibble(parameter=numeric(),accuracy=numeric(),word_accuracy=numeric())
 for (i in range){
                     scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,i,0.25),
+                             word_parameters=c("sin",1,0,i,word_lambda_2),
                              hashtag_parameters=c("exp",4,0.5,3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
                     training_vector <- score_tweets(training,training_tokenised,scores) 
                     fitting_model <- fit_model(training_vector)
                     results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
@@ -473,25 +1013,48 @@ for (i in range){
                     stats <- add_row(stats,parameter=i,accuracy=acc,word_accuracy=w_acc)
                   }
 
-
-stats
 stats_2<-stats
 rm(range,acc,w_acc,stats)
-stats_2[which.max(stats_2$accuracy),]$parameter
 ```
 
 
-```{r}
+```{r word_lambda_3_tuning_results,eval=TRUE}
+word_lambda_3 <- 10
+stats_2 %>% ggplot(aes(parameter,accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(data=(. %>% filter(accuracy == stats_2[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  geom_point(data=(. %>% filter(parameter == word_lambda_3)),color='orange',fill='orange',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Word Score - lambda_3 tuning",x="lambda_3", y = "Accuracy") +
+  theme_grey() 
+
+#word_lambda_3 <- stats_2[which.max(stats_2$accuracy),]$parameter
+
+results_comparison <- add_row(results_comparison,
+                              attempt="Optimised word score - lambda_3",
+                              accuracy=stats_2[which(stats_2$parameter==word_lambda_3),]$accuracy)
+```
+
+
+This result is a bit more interesting. As observed above, the first optimal $\lambda_3$ is quite a low value, however there is a relative bigger decrease in accuracy around its neighbours when compared against the second best $\lambda_3$. It is important to notice that the accuracy  depends on the corpus of words in the test set and how they are combined into sentences. This is of course random and it will change from set to set. Even though we can do cross validation, perhaps it is not a bad a idea (as an initial step), choose a perhaps sub-optimal value for the sake of consistency - at least until more thorough tuning is possible. Therefore, to continue with this excercise, a value of $lambda_3$=`r word_lambda_3` has been chosen.
+
+After the word scoring, perhaps the most relevant component in the model is the scoring function for hashtags (given that hashtag intend to be **meaningful** descriptors). Similarly to the word scoring, we will tune the equivalent parameters hashtag's $lamdba_2$ and $lamdba_3$.
+
+The results for the tuning of $lamdba_2$ are shown below:
+
+
+```{r hashtag_lambda_2_tuning}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 
-range <- seq(0.1,0.9,0.1)
+range <- seq(0.1,2,0.2)
 stats <- tibble(parameter=numeric(),accuracy=numeric(),hashtag_accuracy=numeric())
 for (i in range){
                     scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.25),
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
                              hashtag_parameters=c("exp",4,i,3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
                     training_vector <- score_tweets(training,training_tokenised,scores) 
                     fitting_model <- fit_model(training_vector)
                     results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
@@ -500,25 +1063,49 @@ for (i in range){
                     stats <- add_row(stats,parameter=i,accuracy=acc,hashtag_accuracy=h_acc)
                   }
 
-
-stats
 stats_3<-stats
 rm(range,acc,w_acc,stats)
-stats_3[which.max(stats_3$accuracy),]$parameter
 ```
 
+```{r hashtag_lambda_2_tuning_results,eval=TRUE}
+p1 <- stats_3 %>% ggplot(aes(parameter,accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Hashtag Score - lambda_2 tuning - General Accuracy ",x="lambda_2", y = "Accuracy") +
+  theme_grey() 
 
-```{r}
+p2 <- stats_3 %>% ggplot(aes(parameter,accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Hashtag Score - lambda_2 tuning - Hashtag Model",x="lambda_2", y = " Hashtag Accuracy") +
+  theme_grey() 
+
+grid.arrange(p1,p2,ncol=2)
+rm(p1,p2)
+hashtag_lambda_2 <- 0.5
+```
+
+The first graph shows the overall accuracy results (comparable to the word tuning), while the second graph shows the results where there is a hasthag. From them, the following points can be made:
+
+* Smaller variations in the overall score can be explained to the fact that not all tweets have hasthags, thus the effect of tuning this part of the model will obvisouly have a limited effect on the general result.
+* Taking the above point, it looks like its contribution to general score it is mostly when hasthags do indicate a cathastrophe (and therefore have a bigger score). It is worth noticing that many of the high-score hashtag were not ranked by the algorithm but manually added - which is perhaps and indication that manual curation is not necessarily a bad idea - especially when data is poor quality or insufficient.
+
+With this mind, the tuning of $lamdba_3$ will help to determine the overall effect of hashtag occurence. The results are shown in the below chart.
+
+```{r hashtag_lambda_3}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 
-range <- seq(0,50,5)
+range <- seq(2,24,1)
 stats <- tibble(parameter=numeric(),accuracy=numeric(),hashtag_accuracy=numeric())
 for (i in range){
                     scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.25),
-                             hashtag_parameters=c("exp",4,0.8,i),
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
+                             hashtag_parameters=c("exp",4,hashtag_lambda_2,i),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
                     training_vector <- score_tweets(training,training_tokenised,scores) 
                     fitting_model <- fit_model(training_vector)
                     results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
@@ -527,27 +1114,83 @@ for (i in range){
                     stats <- add_row(stats,parameter=i,accuracy=acc,hashtag_accuracy=h_acc)
                   }
 
-
-stats
 stats_4<-stats
 rm(range,acc,w_acc,stats)
-stats_4[which.max(stats_4$accuracy),]$parameter
 ```
 
+```{r hashtag_lambda_3_tuning_results,eval=TRUE}
+stats_4%>% ggplot(aes(parameter,accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(data=(. %>% filter(accuracy == stats_4[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title=" Hashtag Score - lambda_3 tuning - General Accuracy",x="lamdba_3", y = "Accuracy") +
+  theme_grey() 
 
+hashtag_lambda_3 <- 20
+results_comparison <- add_row(results_comparison,
+                              attempt="Optimised hashtag score - lambda_3",
+                              accuracy=stats_4[which(stats_4$parameter==hashtag_lambda_3),]$accuracy)
+```
+
+This result seems similar in nature to the tuning for quantity cut-off for the word scoring.
+
+Looking at the results so far (table below), this tuning process has only resulted in small gains when compared with the initial data corrections. Taking that the effect of hasthag tuning is small, in this report the tuning of the links and handle scoring functions will not be conducted. This doesn't mean they may bring an improved accuracy but perhaps are not worth the effort given the existing training dataset.
+
+```{r results_comparison_2}
+results_comparison %>%
+  kable(caption="Initial Comparison",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","HOLD_position")) 
+```
 
 ```{r}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.25),
-                             hashtag_parameters=c("exp",4,0.8,20),
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
+                             hashtag_parameters=c("exp",4,hashtag_lambda_2,hashtag_lambda_3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
 training_vector <- score_tweets(training,training_tokenised,scores) 
  
                  
-word_grid <-  expand.grid(nIter = seq(2, 20, 1))
+#word_grid <-  expand.grid(nIter = seq(2, 20, 1))
 
+
+fitting_model <- fit_model(training_vector,method_word="glm",# tuneGrid_word = word_grid,
+                      method_hashtag="glm",
+                      method_link="glm",
+                      method_handle="glm",
+                      method_aggregate="xgbTree")
+
+results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
+word_model_1_0<- fitting_model$word        
+stats_5_1 <- results$eval
+scores$hashtags
+```
+
+Instead, the decission is to focus on the tuning of the classification functions. At this point, the model uses the caret package to leverage to known machine learning algorithms, namely:
+
+* *glm* (as in generalised linear model) in its logisitc regression mode to turn word, hashtag, link and mention to make a prediction on those components independently.
+* *xgbTree* (extreme gradient boosting) to predict an "overall" positive or negative based on the previous predictions.
+
+Considering that the assignment instructions state  **"For this project, you will be applying machine learning techniques that go beyond standard linear regression"**, the next stage will be to asses if there is any model that produces better results than glm. (Although so far this is not a **standard**  linear regression model anymore.)
+
+After investigating a number of possible algorithms, the [**LogitBoost**](https://en.wikipedia.org/wiki/LogitBoost) will use as comparison. This algorithm is available in R through the [**caTools**](https://www.rdocumentation.org/packages/caTools/versions/1.17.1/topics/LogitBoost) package.
+
+As a starting point, we will try this algorithm for the word score classification function. The below results show the best result after tuning its only parameter, which is the number of iterations.
+
+```{r word_logitboost}
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores<- calculate_scores(training_tokenised,
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
+                             hashtag_parameters=c("exp",4,hashtag_lambda_2,hashtag_lambda_3),
+                             handle_parameters=c("exp",4,0.8,4),
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
+training_vector <- score_tweets(training,training_tokenised,scores) 
+
+word_grid <-  expand.grid(nIter = seq(2, 20, 1))
 
 fitting_model <- fit_model(training_vector,method_word="LogitBoost", tuneGrid_word = word_grid,
                       method_hashtag="glm",
@@ -558,25 +1201,43 @@ fitting_model <- fit_model(training_vector,method_word="LogitBoost", tuneGrid_wo
 results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
 word_model_1<- fitting_model$word        
 stats_5 <- results$eval
-word_model_1 
-stats_5
 ```
 
 
-```{r}
+```{r word_logitboost_result, eval=TRUE}
+word_model_1$results %>% select(Iterations=nIter,Accuracy) %>% 
+  ggplot(aes(Iterations,Accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+ # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Word Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
+  theme_grey() 
+  
+results_comparison <- add_row(results_comparison,
+                              attempt="Word score - LogitBoost",
+                              accuracy=stats_5[which(stats_5$eval=="aggregate"),]$result_method)
+```
+
+
+Please note graph above shows the accuracy results for the LogitBoost regression only, not for the entire model. However, it shows that in this case the tuning has not effect. 
+In this case, the overall accuracy equals *`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`*.These result is no better than the one using the a simple logistic regression. Similar results are obtained when the same comparison is repeated for the other scoring components.
+
+
+```{r other_logitboost}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.25),
-                             hashtag_parameters=c("exp",4,0.8,20),
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
+                             hashtag_parameters=c("exp",4,hashtag_lambda_2,hashtag_lambda_3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
 training_vector <- score_tweets(training,training_tokenised,scores) 
  
 tuning_grid <-  expand.grid(nIter = seq(2, 20, 1))
 
 fitting_model <- fit_model(training_vector,method_word="glm",
                       method_hashtag="LogitBoost", tuneGrid_hashtag = tuning_grid,
-                      method_link="LogitBoost", tuneGrid_link = tuning_grid,
+                      method_link="LogitBoost" , tuneGrid_link = tuning_grid,
                       method_handle="LogitBoost", tuneGrid_handle = tuning_grid,
                       method_aggregate="xgbTree")
 
@@ -589,43 +1250,86 @@ stats_6 <- results$eval
 ```
 
 
-```{r}
-hashtag_model_2
-link_model_2
-handle_model_2
-stats_6
+```{r other_logitboost_result,eval=TRUE}
+
+p1<- hashtag_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
+  ggplot(aes(Iterations,Accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+ # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Hashtag Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
+  theme_grey() 
+
+p2<- link_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
+  ggplot(aes(Iterations,Accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+ # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Link Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
+  theme_grey() 
+
+p3<- handle_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
+  ggplot(aes(Iterations,Accuracy)) +
+  geom_point(color='grey',fill='grey',size=4) +
+ # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  theme(legend.position="bottom") +
+  labs(title="Handle Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
+  theme_grey()
+
+grid.arrange(p1,p2,p3,ncol=3)
+
+results_comparison <- add_row(results_comparison,
+                              attempt="Other scores - LogitBoost",
+                              accuracy=stats_6[which(stats_6$eval=="aggregate"),]$result_method)
+rm(p1,p2,p3)
 ```
 
+In this case, the accuracy value equals  *`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`*, which is worse than the classification using a logistic regresion.  
+
+This results shouldn't be confusing - a more "sophisticated" method does not necessarily mean a better result  the important thing is to find the model that better represents the problem at hand (when possible). Simpler models may also have an advantage in terms of processing time - which may be a key factor to consider even if other models perform marginally better. 
+
 
 ```{r}
-aggregate_model_2
+#to check only
+aggregate_model_2$bestTune
 ```
 
+Completed the above steps, there is one aspect left to tune : the XGBoost algorithm. This method has several parameters, for which a good explanation of them can be found [here](https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/beginners-tutorial-on-xgboost-parameter-tuning-r/tutorial/). 
 
-```{r}
+Given the number of parameters, a full sweep of all them could take very, very long. However, the caret packages already does some tuning by default. We will use the results from the previous iteration as a starting point.
 
+
+```{r xgbTree_best_tune, eval=TRUE}
+aggregate_model_2$bestTune %>% kable(caption="XGBoost - Best Tune",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","HOLD_position")) 
+```
+
+Below is the code used for tuning:
+
+
+```{r xgbTree_tuning, echo=TRUE}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.25),
-                             hashtag_parameters=c("exp",4,0.8,20),
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
+                             hashtag_parameters=c("exp",4,hashtag_lambda_2,hashtag_lambda_3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
 training_vector <- score_tweets(training,training_tokenised,scores) 
  
-tuning_grid <-  expand.grid(nIter = 2)
 aggregate_tuning_grid <- expand.grid(nrounds = seq(45,55,1), #50 
-                                     max_depth = seq(1,4,1), #1
+                                     max_depth = 1:3, #1
                                      eta = seq(0.2,0.4,0.1),  #0.3
-                                     gamma =seq(0,0.5,0.1), #0
+                                     gamma =seq(0,1,0.1), #0
                                      colsample_bytree = seq(0.7,0.9,0.1), #0.8
-                                     min_child_weight = seq(0,10,1), #1
-                                     subsample = seq(0.65,0.85,0.05)) #0.75
-
+                                     min_child_weight = 1:3, #1
+                                     subsample = 0.75) #0.75
 
 fitting_model <- fit_model(training_vector,method_word="glm",
-                      method_hashtag="LogitBoost", tuneGrid_hashtag = tuning_grid,
-                      method_link="LogitBoost", tuneGrid_link = tuning_grid,
-                      method_handle="LogitBoost", tuneGrid_handle = tuning_grid,
+                      method_hashtag="glm", 
+                      method_link="glm", 
+                      method_handle="glm",
                       method_aggregate="xgbTree", tuneGrid_aggregate = aggregate_tuning_grid)
 
 results<-predict_values(test,fitting_model,scores,extra_stop_words,domains_data)
@@ -636,10 +1340,14 @@ stats_7 <- results$eval
 
 
 
-```{r}
-aggregate_model_3 
+```{r xgbTree_tuning_results,eval=TRUE}
+aggregate_model_3$bestTune 
 stats_7
 ```
+
+
+# Results
+<!-- A results section that presents the modeling results and discusses the model performance. -->
 
 
 ```{r}
@@ -648,28 +1356,27 @@ training_validation <- rbind(training,test)
 
 training_tokenised_validation <- tokenise_data(training_validation, extra_stop_words,domains_data,training_flag=TRUE)
 scores_validation<- calculate_scores(training_tokenised,
-                             word_parameters=c("sin",1,0,10,0.25),
-                             hashtag_parameters=c("exp",4,0.8,20),
+                             word_parameters=c("sin",1,0,word_lambda_3,word_lambda_2),
+                             hashtag_parameters=c("exp",4,hashtag_lambda_2,hashtag_lambda_3),
                              handle_parameters=c("exp",4,0.8,4),
-                             link_parameters=c("exp",4,0.9,4))
+                             link_parameters=c("exp",4,0.9,4),
+                              manual_scores = manual_scores)
 training_vector_validation <- score_tweets(training_validation,training_tokenised_validation,scores_validation) 
  
 tuning_grid <-  expand.grid(nIter = 2)
-aggregate_tuning_grid <- expand.grid(nrounds = 53, #53 
-                                     max_depth = 4, #4
+aggregate_tuning_grid <- expand.grid(nrounds = 50, #53 
+                                     max_depth = 2, #4
                                      eta = 0.3,  #0.3
-                                     gamma =0 , #0
-                                     colsample_bytree = 0.7, #0.7
-                                     min_child_weight = 7, #7
-                                     subsample = 0.7) #0.7
-
+                                     gamma =0, #0
+                                     colsample_bytree = 0.8, #0.7
+                                     min_child_weight = 1, #7
+                                     subsample = 0.75) #0.7
 
 fitting_model_validation <- fit_model(training_vector_validation,method_word="glm",
-                      method_hashtag="LogitBoost", tuneGrid_hashtag = tuning_grid,
-                      method_link="LogitBoost", tuneGrid_link = tuning_grid,
-                      method_handle="LogitBoost", tuneGrid_handle = tuning_grid,
-                      method_aggregate="xgbTree", tuneGrid_aggregate = aggregate_tuning_grid)
-
+                      method_hashtag="glm", #tuneGrid_hashtag = tuning_grid,
+                      method_link="glm", #tuneGrid_link = tuning_grid,
+                      method_handle="glm",# tuneGrid_handle = tuning_grid,
+                      method_aggregate="xgbTree")#, tuneGrid_aggregate = aggregate_tuning_grid)
 ```
 
 
@@ -695,3 +1402,12 @@ results_validation$results_extended %>% filter(category=="FP")
 ```{r}
 results_validation$results_extended %>% filter(category=="FN")
 ```
+
+
+
+# Conclusion
+<!-- A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work. -->
+
+* Good quality data matters. Bad input means bad results.
+* Sometimes manual curation will improve the results.
+* There is so much to tune.
