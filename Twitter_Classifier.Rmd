@@ -742,7 +742,7 @@ These functions leverage the caret package and they have been written to provide
 For the initial run - that will help us establish and initial benchmark - the general linear model ([glm]()) in caret is used for the indidivual predictions. For the aggregate preidction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
 
 
-```{r first_predictio, eval=TRUE}
+```{r first_prediction}
 
 training_tokenised <- tokenise_data(training0,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
