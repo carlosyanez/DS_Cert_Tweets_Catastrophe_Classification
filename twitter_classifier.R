@@ -615,12 +615,12 @@ fit_model <- function(score_vector, cv_number = 20,
                        method_handle = "glm", family_handle = "binomial", tuneGrid_handle = 1,
                        method_aggregate = "xgbTree", family_aggregate = "binomial", tuneGrid_aggregate = 1) {
   
-  
+
   fitting_model <-vector(mode = "list", length = 0)
   
   
   #word
-  score_vector_i <-score_vector$vector %>% filter(!is.na(word_score))
+  score_vector_i <-score_vector$vector %>% filter(!is.na(word_score)) %>% select(target,word_score)
   if (!nrow(score_vector_i) == 0) {
     word_exist <-1
     if (tuneGrid_word == 1) {

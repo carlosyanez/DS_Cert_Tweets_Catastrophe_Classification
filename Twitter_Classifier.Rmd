@@ -27,7 +27,8 @@ always_allow_html: yes
 #### WARNING : Running the notebook from scratch, may take SEVERAL HOURS - Run at your own time.####
 
 ### Options on how to generate this report
-
+###Download data from the external source file (done last time on Sat 11 Apr 2020)
+download_source_file <- FALSE
 ### Evaluate all chunks- this may take a lot of time and includes "unshortening" t.co URLs
 eval<-FALSE
 ### Dowload the processed files, to avoid de above
@@ -92,30 +93,33 @@ To start, let's have look at sample data:
 
 ```{r, download_source_file}
 #download data
-dl <- tempfile()
-download.file("https://d1p17r2m4rzlbo.cloudfront.net/wp-content/uploads/2016/03/socialmedia-disaster-tweets-DFE.csv", dl)
-source_data <- read_csv(dl, locale = locale(encoding = "macintosh"))
-rm(dl)
+if(download_source_file==TRUE){
+  dl <- tempfile()
+  download.file("https://d1p17r2m4rzlbo.cloudfront.net/wp-content/uploads/2016/03/socialmedia-disaster-tweets-DFE.csv",
+                dl)
+  source_data <- read_csv(dl, locale = locale(encoding = "macintosh"))
+  rm(dl)
 
 #initial transformation to feed into
-source_data$id <- seq.int(nrow(source_data))
-source_data <- source_data %>% mutate(target=ifelse(choose_one=="Relevant",1,0)) %>% 
+  source_data$id <- seq.int(nrow(source_data))
+  source_data <- source_data %>% mutate(target=ifelse(choose_one=="Relevant",1,0)) %>% 
                 select(id,target,text, keyword,location) 
 
 #process source
-processed_source <-  prepare_data(source_data,profanity_clean = 0) 
-write_csv(processed_source,"processed_source.csv")
+  processed_source <-  prepare_data(source_data,profanity_clean = 0) 
+  write_csv(processed_source,"processed_source.csv")
 
-processed_source2 <-  prepare_data(source_data,profanity_clean = 1) #%>% mutate(original_text=text)
-write_csv(processed_source2,"processed_source_clean.csv")
+  processed_source2 <-  prepare_data(source_data,profanity_clean = 1) 
+  write_csv(processed_source2,"processed_source_clean.csv")
 
-rm(profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger,processed_source2)
-
+  rm(profanity_alvarez,profanity_arr_bad,profanity_banned,profanity_racist,profanity_zac_anger,processed_source2)
+}
 ```
 
 ```{r, show_source_data, eval=TRUE}
 
-source_data %>% select(id,target,text=original_text,keyword,location)%>% filter(id %in% c(1,6,33,49,160,914,3999,7336)) %>% 
+source_data %>% select(id,target,text=original_text,keyword,location)%>%
+  filter(id %in% c(1,6,33,49,160,914,3999,7336)) %>% 
   kable(caption="Sample Data",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "15em") %>%
@@ -161,7 +165,7 @@ In order to obtain the data in the desired format for analysis, the function *pr
 
 The first step is similar for the three components - below is the code use to remove the hashtags:
 
-```{r hasthag_removal_code, echo=TRUE}
+```{r hasthag_removal_code, echo=TRUE, eval=FALSE}
 
  source_data$hashtag <- str_extract_all(source_data$text, "#\\S+")
   source_data <- source_data %>% 
@@ -189,7 +193,7 @@ In the following step, both links and mentions are removed, keeping the hashtags
 
 The code that achieves this is shown below:
 
-```{r, text_cleaning, echo=TRUE}
+```{r, text_cleaning, echo=TRUE, eval=FALSE}
 
  #remove mentions and links from text, save original text in different observation
   
@@ -218,7 +222,7 @@ The code that achieves this is shown below:
 
 An optional step is to remove swear and profane vocabulary from the text, in case that is desired. This has been done through the below code:
 
-```{r, profanity_removal, echo=TRUE}
+```{r, profanity_removal, echo=TRUE, eval=FALSE}
   #profanity removal
   
   if(profanity_clean==1){
@@ -282,7 +286,7 @@ An optional step is to remove swear and profane vocabulary from the text, in cas
 
 As a last step, the function *expand_urls* from the *longurl* package has been leveraged to unshorten the t.co URLs, to obtain the domains of the links. This is done trough the below code:
 
-```{r, get_domains, echo=TRUE}
+```{r, get_domains, echo=TRUE, eval=FALSE}
 
 split<-200
 value <- round(nrow(processed_source)/split,0)
@@ -370,7 +374,7 @@ Before proceeding, we will split this data into three datasets:
 Unless said otherwise all the below analysis has been done with the **training** dataset only!
 
 
-```{r, downlad_processed files}
+```{r, download_processed files}
 
 if(download_processed==TRUE){
 
@@ -438,7 +442,7 @@ Taking the each tweets processed text, the first step is to "tokenise" this data
 
 The code to achieve this goes as follows:
 
-```{r unnest_sample, echo=TRUE}
+```{r unnest_sample, echo=TRUE, eval=FALSE}
 
   data("stop_words")
   extra_stop_words$lexicon <- "EXTRA"
@@ -617,7 +621,7 @@ rm(p,scores1,scores2)
 
 With a set of scores, we would like to know if this produce a set of tweet scores that are a potential good input for a regression function. Due its simplicity, if we using a sum to calculate a score per tweet we can obtain those values with the below code:
 
-```{r calculate_score, echo=TRUE}
+```{r calculate_score, echo=TRUE, eval=FALSE}
 
    tweet_score <- tokenised_words %>% 
                  left_join(word_scores,by="word") %>% filter(!is.na(score)) %>%
@@ -739,8 +743,7 @@ These functions leverage the caret package and they have been written to provide
 For the initial run - that will help us establish and initial benchmark - the general linear model (glm) in caret is used for the indidivual predictions. For the aggregate preidction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
 
 
-```{r first_prediction, eval=TRUE}
-
+```{r first_prediction}
 training_tokenised <- tokenise_data(training0,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
                              word_parameters=c("sin",1,0,10,0),
@@ -754,7 +757,7 @@ results_1<-predict_values(test0,fitting_model,scores,extra_stop_words,domains_da
 
 The accuracy for table and confusion matrix for this example are:
 
-```{r fp_acc,eval=TRUE}
+```{r fp_acc, eval=TRUE}
 results_1$eval %>% select(Method=eval,Accuracy=result_agg) %>%
   kable(caption="Initial results",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
@@ -1326,7 +1329,7 @@ aggregate_model_2$bestTune %>% kable(caption="XGBoost - Best Tune",format = "lat
 
 Below is the code used for tuning:
 
-```{r xgbTree_tuning, echo=TRUE}
+```{r xgbTree_tuning, echo=TRUE, eval=FALSE}
 training_tokenised <- tokenise_data(training,extra_stop_words,
                                     domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
