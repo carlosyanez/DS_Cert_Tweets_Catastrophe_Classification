@@ -1,7 +1,7 @@
 ---
 title: "Data Science Capstone - Tweet Classification System - Catastrophe or Not?"
 author: "Carlos Yáñez Santibáñez"
-date: "`r format(Sys.time(), '%B %d, %Y')`"
+date: "`r format(Sys.time(), '%d %B %Y')`"
 output:
   pdf_document:
     fig_caption: yes
@@ -85,7 +85,7 @@ source("twitter_classifier.R", echo = F, prompt.echo = "", spaced = F)
 # Introduction
 <!-- An introduction/overview/executive summary section that describes the dataset and variables, and summarizes the goal of the project and key steps that were performed. -->
 
-This document presents a machine learning model, whether a particular tweet (message on Twitter.com) is related to a disaster/catastrophic event. This report is the last capstone assignment for HarvardX's Professional Certificate in Data Science, which can be taken at the edX platform. The program is available at   [https://www.edx.org/professional-certificate/harvardx-data-science]( https://www.edx.org/professional-certificate/harvardx-data-science).
+This document presents a machine learning model used to predict whether a particular tweet (message on [Twitter.com](http://www.twitter.com)) is related to a disaster/catastrophic event. This report is the last capstone assignment for HarvardX's Professional Certificate in Data Science, which can be taken at the edX platform. The program is available at   [https://www.edx.org/professional-certificate/harvardx-data-science]( https://www.edx.org/professional-certificate/harvardx-data-science).
 
 This problem has been inspired in a Kaggle's beginner competition called [Real or Not? NLP with Disaster Tweets](https://www.kaggle.com/c/nlp-getting-started). However, the data used in this  data used in this exercise does not come from Kaggle. Instead, it has been downloaded directly from Kaggle's inspiration on figure-eight's  ["Data for Everyone"](https://www.figure-eight.com/data-for-everyone/) webpage. 
 
@@ -806,11 +806,11 @@ if(eval==TRUE){
 results_1_cm <- confusionMatrix(results_1$results$target,results_1$results$aggregate)
 fourfoldplot(results_1_cm$table,
              color = c("#B22222", "#2E8B57"),
-               main = "") + 
-    text(-0.4,0.4, "TN", cex=1) + 
-    text(0.4, -0.4, "TP", cex=1) + 
-    text(0.4,0.4, "FN", cex=1) + 
-    text(-0.4, -0.4, "FP", cex=1) 
+               main = "") #+ 
+    #text(-0.4,0.4, "TN", cex=1) + 
+    #text(0.4, -0.4, "TP", cex=1) + 
+    #text(0.4,0.4, "FN", cex=1) + 
+    #text(-0.4, -0.4, "FP", cex=1) 
 rm(results_1_cm)
 ```
 
@@ -1469,9 +1469,10 @@ results_validation<-predict_values(validation,fitting_model,scores,extra_stop_wo
 ```
 
 
-The result of this is displayed in the below accuracy summary
 
-```{r validation_results,eval=TRUE}
+```{r validation_results}
+#The result of this is displayed in the below accuracy summary
+
 results_validation$eval  %>% select(Component=eval,Accuracy=result_agg) %>%
   kable(caption="XGBoost - Best Tune",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
@@ -1487,11 +1488,11 @@ validation_cm<-confusionMatrix(as.factor(results_validation$results_extended$tar
 
 fourfoldplot(validation_cm$table,
             color = c("#B22222", "#2E8B57"),
-           main = "") + 
-           text(-0.4,0.4, "TN", cex=1) + 
-           text(0.4, -0.4, "TP", cex=1) + 
-           text(0.4,0.4, "FN", cex=1) + 
-           text(-0.4, -0.4, "FP", cex=1)
+           main = "") #+ 
+           #text(-0.4,0.4, "TN", cex=1) + 
+           #text(0.4, -0.4, "TP", cex=1) + 
+           #text(0.4,0.4, "FN", cex=1) + 
+           #text(-0.4, -0.4, "FP", cex=1)
 ```
 
 Looking at those results, it looks like we have reached some sort of ceiling for the model. As mentioned before, possible culprits are the model or the data. Considering that at the start of the this report data issues were flagged, it wouldn't be unreasonable to suspect that is a main contributor. To confirm this, both false positives and false negatives were inspected - below are a sample of both groups:
@@ -1559,7 +1560,8 @@ rm(agg_summary,word_summary,hashtag_summary,handle_summary,link_summary)
 
 overall_summary <- overall_summary %>% gather(prediction,value,-category,-method)
 
-overall_summary %>% filter(category=="FP") %>% filter(!is.na(value)) %>%
+overall_summary %>% filter(category=="FP") %>%
+  filter(!is.na(value)) %>% filter(!(value==0)) %>%
   ggplot(aes(x=method,y=value,fill=prediction,label=value)) + geom_col() + 
   theme(legend.position="bottom") +
   labs(title="Count of Predictions per component - False Positives",x="Component Prediction", y = "Count") +
@@ -1569,6 +1571,7 @@ overall_summary %>% filter(category=="FP") %>% filter(!is.na(value)) %>%
 ```{r overall_summary, eval=TRUE}
 
 overall_summary %>% select(-category) %>% 
+    filter(!is.na(value)) %>% filter(!(value==0)) %>%
   group_by(method,prediction) %>% summarise(value=sum(value)) %>% ungroup() %>%
   ggplot(aes(x=method,y=value,fill=prediction,label=value)) + geom_col() +
   labs(title="Count of Predictions per component - All Validation Results",x="Component Prediction", y = "Count") + geom_text(position = position_stack(vjust = 0.5)) +
