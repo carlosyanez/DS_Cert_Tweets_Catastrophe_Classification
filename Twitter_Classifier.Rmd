@@ -468,14 +468,14 @@ p<- training_tokenised$tokenised_words %>% group_by(word) %>%
   geom_point(data=(. %>% filter(word %in% selected_words)),
              color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
   theme(legend.position="bottom") +
-  labs(title="Positive and Negative Ocurrences for each Word (logaritmic scale)",y="Positives", x = "Negatives") +
+  labs(title="Pos. and neg. ccurrences for each word (log scale)",y="Positives", x = "Negatives") +
   theme_grey() +
   geom_abline(color = "gray40", lty = 2)  +
   geom_text_repel(aes(label=ifelse((word %in% selected_words),as.character(word),'')),
-            hjust=0,vjust=0,
-            nudge_x = 0.02,
-            nudge_y = 0.02,
-            color="black",size=5) +
+        #    hjust=0,vjust=0,
+        #    nudge_x = 0.02,
+        #    nudge_y = 0.02,
+            color="black",size=3) +
   scale_x_log10() +
   scale_y_log10()
 
@@ -515,8 +515,6 @@ p<- scores1$words %>%
             color="black",size=3)
 
 p
-#for interactive version
-#ggplotly(p)
 rm(p)
 ```
 
@@ -546,7 +544,7 @@ p<- scores1$words %>%
   theme_grey() +
   geom_abline(color = "gray40", lty = 2)  +
   geom_text_repel(aes(label=ifelse((word %in% selected_words),as.character(word),'')),
-            hjust=0,vjust=0,
+     #       hjust=0,vjust=0,
             nudge_x = 0.02,
             nudge_y = -0.03,
             color="black",size=3)
@@ -612,7 +610,6 @@ p<- scores2$words %>%
             color="black",size=3)
 
 p
-#ggplotly(p)
 
 rm(p,scores1,scores2)
 ```
@@ -739,10 +736,10 @@ For this process, two functions have been written in this report .R file:
 
 These functions leverage the caret package and they have been written to provide some flexibility - for example **fit_model** allows to be run using different machine learning models. For further details, please refer to the detailed commentary in the .R file.
 
-For the initial run - that will help us establish and initial benchmark - the general linear model ([glm]()) in caret is used for the indidivual predictions. For the aggregate preidction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
+For the initial run - that will help us establish and initial benchmark - the general linear model (glm) in caret is used for the indidivual predictions. For the aggregate preidction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
 
 
-```{r first_prediction}
+```{r first_prediction, eval=TRUE}
 
 training_tokenised <- tokenise_data(training0,extra_stop_words,domains_data,training_flag=TRUE)
 scores<- calculate_scores(training_tokenised,
@@ -763,39 +760,49 @@ results_1$eval %>% select(Method=eval,Accuracy=result_agg) %>%
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","HOLD_position")) 
 
-results_comparison <- tibble(attempt=numeric(),accuracy=numeric())
-results_comparison <- add_row(results_comparison,
+if(eval==TRUE){
+  results_comparison <- tibble(attempt=numeric(),accuracy=numeric())
+  results_comparison <- add_row(results_comparison,
                               attempt="Initial training",
                               accuracy=results_1$eval[which(results_1$eval$eval=="aggregate"),]$result_method)
+}
 ```
 
 
-```{r confusion_matrix0,eval=TRUE}
+```{r confusion_matrix11, eval=TRUE}
 results_1_cm <- confusionMatrix(results_1$results$target,results_1$results$aggregate)
-fourfoldplot(results_1_cm$table) 
+fourfoldplot(results_1_cm$table,
+             color = c("#B22222", "#2E8B57"),
+               main = "") + 
+    text(-0.4,0.4, "TN", cex=1) + 
+    text(0.4, -0.4, "TP", cex=1) + 
+    text(0.4,0.4, "FN", cex=1) + 
+    text(-0.4, -0.4, "FP", cex=1) 
 rm(results_1_cm)
 ```
 
 As observed, there are large number of false positives and false negatives. A sample of those is provided below:
 
 ```{r result_1_FP,eval=TRUE}
-results_1$results_extended %>% filter(category == "FP") %>% select(id,target,original_text) %>%
- filter(id %in% c(368,744,1699,1716,4385,9435,9641))%>% 
+results_1$results_extended %>% filter(category == "FP")  %>%
+  select(id,target,original_text)  %>%
+  filter(id %in% c(269,3581,1026,9779,10380,10402)) %>%
   kable(caption="Initial results - False Positives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("striped","HOLD_position")) 
+  kable_styling(latex_options =c("striped","hold_position","scale_down")) 
 
 ```
 
 ```{r result_1_FN,eval=TRUE}
 
-results_1$results_extended %>% filter(category == "FN") %>% select(id,target,original_text) %>% 
-   filter(id %in% c(351,2160,2817,4173,4614,4721,7214)) %>%
+results_1$results_extended %>% filter(category == "FN")  %>%
+  select(id,target,original_text)  %>%
+  filter(id %in% c(3,253,1172,1968,6571)) %>%
   kable(caption="Initial results - False Negatives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("striped","HOLD_position")) 
+  kable_styling(latex_options =c("striped","hold_position","scale_down")) 
 
 ```
 
@@ -806,7 +813,7 @@ results_1$results_extended %>% filter(grepl("Hiroshima",text)) %>% select(id,tar
   kable(caption="Initial results - Hiroshima Tweets",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("stripped","HOLD_position")) 
+  kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
 
 The above reflects two important problems with machine learning and natural language:
@@ -851,8 +858,8 @@ training <- rbind(training,initial_results)
 ```
 
 ```{r corrected_results1}
-training_tokenised$tokenised_handles <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
-scores$hashtags<- calculate_scores(training_tokenised,
+training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
+scores <- calculate_scores(training_tokenised,
                              word_parameters=c("sin",1,0,10,0),
                              hashtag_parameters=c("exp",4,0.5,3),
                              handle_parameters=c("exp",4,0.5,4),
@@ -870,9 +877,11 @@ results_2$eval %>% select(Component=eval,Accuracy=result_agg) %>%
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","hold_position")) 
 
-results_comparison <- add_row(results_comparison,
+if(eval==TRUE){
+                results_comparison <- add_row(results_comparison,
                               attempt="Initial training - Data Correction",
                               accuracy=results_2$eval[which(results_3$eval$eval=="aggregate"),]$result_method)
+              }
 ```
 
 This illustrates that better training data can lead to better results. It is also worth noticing this may well reflect a real-life scenario, where a social media monitoring centre is constantly reviewing false negatives and false negatives with the purpose of keep re-training a model to adapt to changes language, emerging events, etc.
@@ -900,15 +909,17 @@ results_3$eval %>% select(Component=eval,Accuracy=result_agg) %>%
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","hold_position")) 
 
+if(eval==TRUE){
 results_comparison <- add_row(results_comparison,
                               attempt="Curated hashtags",
                               accuracy=results_3$eval[which(results_3$eval$eval=="aggregate"),]$result_method)
+}
 ```
 
 Looking at the work done so far, we have the below table showing the improvements obtained by improving and supplementing the data:
 
-```{r results_comparison_1,eval=TRUE}
-results_comparison %>%
+```{r results_comparison_1_0,eval=TRUE}
+results_comparison[1:3,] %>%
   kable(caption="Initial Comparison",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","hold_position")) 
@@ -917,7 +928,7 @@ results_comparison %>%
 
 ## Tuning
 
-With this new, "augmented" dataset the next step of the process is to tune the model. Looking at how the model it's constructed, there are *many* aspects to tune, namely:
+With this new, *augmented* dataset the next step of the process is to tune the model. Looking at how the model it's constructed, there are *many* aspects to tune, namely:
 
 * The parameters used to calculate the tweet, hasthag, link and mention scores.
 * The selection of classification algorithms used.
@@ -973,15 +984,18 @@ rm(range,acc,w_acc,stats)
 ```{r  word_lambda_2_tuning_results,eval=TRUE}
 stats_1 %>% ggplot(aes(parameter,accuracy)) +
   geom_point(color='grey',fill='grey',size=4) +
-  geom_point(data=(. %>% filter(accuracy == stats_1[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  geom_point(data=(. %>% filter(accuracy == stats_1[which.max(accuracy),]$accuracy)),
+             color='red',fill='red',size=4) +
   theme(legend.position="bottom") +
   labs(title="Word Score - lambda_2 tuning",x="lambda_2", y = "Accuracy") +
   theme_grey() 
 
 word_lambda_2 <- stats_1[which.max(stats_1$accuracy),]$parameter
+if(eval==TRUE){
 results_comparison <- add_row(results_comparison,
                               attempt="Optimised word score - lambda_2",
                               accuracy=stats_1[which.max(stats_1$accuracy),]$accuracy)
+}
 
 ```
 
@@ -1027,9 +1041,11 @@ stats_2 %>% ggplot(aes(parameter,accuracy)) +
 
 #word_lambda_3 <- stats_2[which.max(stats_2$accuracy),]$parameter
 
+if(eval==TRUE){
 results_comparison <- add_row(results_comparison,
                               attempt="Optimised word score - lambda_3",
                               accuracy=stats_2[which(stats_2$parameter==word_lambda_3),]$accuracy)
+}
 ```
 
 
@@ -1124,9 +1140,11 @@ stats_4%>% ggplot(aes(parameter,accuracy)) +
   theme_grey() 
 
 hashtag_lambda_3 <- 20
+if(eval==TRUE){
 results_comparison <- add_row(results_comparison,
                               attempt="Optimised hashtag score - lambda_3",
                               accuracy=stats_4[which(stats_4$parameter==hashtag_lambda_3),]$accuracy)
+}
 ```
 
 This result seems similar in nature to the tuning for quantity cut-off for the word scoring.
@@ -1134,7 +1152,7 @@ This result seems similar in nature to the tuning for quantity cut-off for the w
 Looking at the results so far (table below), this tuning process has only resulted in small gains when compared with the initial data corrections. Taking that the effect of hasthag tuning is small, in this report the tuning of the links and handle scoring functions will not be conducted. This doesn't mean they may bring an improved accuracy but perhaps are not worth the effort given the existing training dataset.
 
 ```{r results_comparison_2,eval=TRUE}
-results_comparison %>%
+results_comparison[1:6,] %>%
   kable(caption="Initial Comparison",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","HOLD_position")) 
@@ -1209,10 +1227,12 @@ word_model_1$results %>% select(Iterations=nIter,Accuracy) %>%
   theme(legend.position="bottom") +
   labs(title="Word Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey() 
-  
+
+if(eval==TRUE){  
 results_comparison <- add_row(results_comparison,
                               attempt="Word score - LogitBoost",
                               accuracy=stats_5[which(stats_5$eval=="aggregate"),]$result_method)
+}
 ```
 
 
@@ -1247,12 +1267,11 @@ stats_6 <- results$eval
 ```
 
 
-```{r other_logitboost_result,eval=TRUE}
+```{r other_logitboost_result0,eval=TRUE}
 
 p1<- hashtag_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
   geom_point(color='grey',fill='grey',size=4) +
- # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
   theme(legend.position="bottom") +
   labs(title="Hashtag Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey() 
@@ -1260,7 +1279,7 @@ p1<- hashtag_model_2$results %>% select(Iterations=nIter,Accuracy) %>%
 p2<- link_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
   geom_point(color='grey',fill='grey',size=4) +
- # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+
   theme(legend.position="bottom") +
   labs(title="Link Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey() 
@@ -1268,16 +1287,19 @@ p2<- link_model_2$results %>% select(Iterations=nIter,Accuracy) %>%
 p3<- handle_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
   geom_point(color='grey',fill='grey',size=4) +
- # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
   theme(legend.position="bottom") +
   labs(title="Handle Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey()
 
-grid.arrange(p1,p2,p3,nrow=3)
+p1
+p2
+p3
 
+if(eval==TRUE){
 results_comparison <- add_row(results_comparison,
                               attempt="Other scores - LogitBoost",
                               accuracy=stats_6[which(stats_6$eval=="aggregate"),]$result_method)
+}
 rm(p1,p2,p3)
 ```
 
@@ -1345,17 +1367,19 @@ aggregate_model_3$bestTune %>% kable(caption="XGBoost - Best Tune",format = "lat
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","HOLD_position")) 
 
+if(eval==TRUE){
 results_comparison <- add_row(results_comparison,
                               attempt="Optimised XGBoost",
                               accuracy=stats_7[which(stats_7$eval=="aggregate"),]$result_method)
+}
 ```
 
 
 When compared with all the previous results, we have the below chart
 
-```{r compared_results,eval=TRUE}
+```{r results_after_training, eval=TRUE}
 results_comparison %>%
-  kable(caption="Initial Comparison",format = "html", booktabs = TRUE,
+  kable(caption="Initial Comparison",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
@@ -1364,6 +1388,7 @@ As shown above, the greatest gains in accuracy are due to the data correction an
 
 Nevertheless, up to this point we have try touched all the relevant aspects of the model. Therefore (for the purpose of the this assignment), the only step left is to assess against the validation data and then comment based on those results.
 
+\newpage
 # Results
 <!-- A results section that presents the modeling results and discusses the model performance. -->
 
@@ -1419,12 +1444,17 @@ results_validation$eval  %>% select(Component=eval,Accuracy=result_agg) %>%
 The confusion matrix for this result is shown below:
 
 ```{r validation_cm,eval=TRUE}
-#taken from https://medium.com/@verajosemanuel/fourfoldplot-a-prettier-confusion-matrix-in-base-r-1a6f7a3176d4
 
-validation_cm<- confusionMatrix(as.factor(results_validation$results_extended$target),
+validation_cm<-confusionMatrix(as.factor(results_validation$results_extended$target),
                 as.factor(results_validation$results_extended$aggregate))
 
-fourfoldplot(validation_cm$table)
+fourfoldplot(validation_cm$table,
+            color = c("#B22222", "#2E8B57"),
+           main = "") + 
+           text(-0.4,0.4, "TN", cex=1) + 
+           text(0.4, -0.4, "TP", cex=1) + 
+           text(0.4,0.4, "FN", cex=1) + 
+           text(-0.4, -0.4, "FP", cex=1)
 ```
 
 Looking at those results, it looks like we have reached some sort of ceiling for the model. As mentioned before, possible culprits are the model or the data. Considering that at the start of the this report data issues were flagged, it wouldn't be unreasonable to suspect that is a main contributor. To confirm this, both false positives and false negatives were inspected - below are a sample of both groups:
@@ -1432,27 +1462,28 @@ Looking at those results, it looks like we have reached some sort of ceiling for
 ```{r validation_FP, eval=TRUE}
 results_validation$results_extended  %>% filter(category=="FP") %>%
   select(id,target,original_text) %>%
- filter(id %in% c(490,650,2153,6486,10402,9600,10492,5434))%>% 
+ filter(id %in% c(490,650,2153,10402,9600,10492,5434))%>% 
   kable(caption="Validation Results - False Positives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("striped","HOLD_position"))
+  kable_styling(latex_options =c("striped","HOLD_position","scale_down"))
 ```
 
 
-```{r}
+```{r validation_FN, eval=TRUE}
 results_validation$results_extended %>%  filter(category=="FN") %>%
   select(id,target,original_text) %>%
- filter(id %in% c(283,391,1172,1772,2341,3259,3614,4310,9781,9795))%>% 
+ filter(id %in% c(283,391,1172,1772,2341,3259,4310,9781,9795)) %>% 
   kable(caption="Validation Results - False Negatives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("striped","HOLD_position"))
+  kable_styling(latex_options =c("striped","HOLD_position","scale_down"))
+
 ```
 
 After inspecting for set, it looks like there is a problem of misclassification with the false negatives. In this case the model *correctly* predicts most of them as not a disaster tweet. However, upon inspection it seems the model is clearly *incorrectly* classifying most of all false positives. It is worth noticing though that all of them contain "catasthrophe" words. A possible reason of this that the model is mostly driven by the words rather than the other attributes and its limited lexicon results in wrong scores for those tweets. Fortunately, it is possible to see for those tweets whether a prediction for each component was generated of not, which is shown in the below charts, for false positives and all validation tweets.
 
-```{r validation_predictions_fp,eval=TRUE}
+```{r validation_predictions_fp, eval=TRUE}
 agg_summary <- results_validation$results_extended %>%
   select(category,aggregate) %>% 
   gather(method,prediction,-category)%>% filter(!is.na(prediction)) %>%
@@ -1498,7 +1529,7 @@ overall_summary %>% filter(category=="FP") %>% filter(!is.na(value)) %>%
   theme_grey() + geom_text(position = position_stack(vjust = 0.5))
 ```
 
-```{r overall_summary}
+```{r overall_summary, eval=TRUE}
 
 overall_summary %>% select(-category) %>% 
   group_by(method,prediction) %>% summarise(value=sum(value)) %>% ungroup() %>%
@@ -1510,7 +1541,7 @@ overall_summary %>% select(-category) %>%
 
 Both results show - interestingly that the overall results is almost entirely driven by the word scoring model. In fact, this model is basically ignoring the other attributes. This can be explained by the attribute distribution in the training data. As shown in below graph, the tweets that only have words exceed by far any other combination, which probably results in the XGBoost algorithm ignoring all other components. Although in theory hashtags, links and handles make sense, the existing data is making them irrelevant.
 
-```{r validation_training, eval_true}
+```{r validation_training, eval=TRUE}
 training_vector_validation$split %>% select(type,n_perc) %>% mutate(percentage=round(n_perc,2)) %>%
   ggplot(aes(x=type,y=percentage,label=percentage)) %>%
   + geom_col(fill="#FFDB6D") +
@@ -1547,8 +1578,12 @@ rbind(absent,present) %>% group_by(target) %>%
 
 The consequence of this will be incorrect or incomplete scoring - this is one probable reason for the high number of false negatives. Again, the conclusion seems to be that good quality training data, in reasonable quantities is critical for a good machine learning model.
 
+\newpage
 # Conclusion
 <!-- A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work. -->
+
+In this report
+
 
 * Good quality data matters. Bad input means bad results.
 * Sometimes manual curation will improve the results.
