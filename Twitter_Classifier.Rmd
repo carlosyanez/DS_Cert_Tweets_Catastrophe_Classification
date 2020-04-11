@@ -1,5 +1,5 @@
 ---
-title: "Data Science Capstone - Tweet Classsification System - Catastrophe or Not?"
+title: "Data Science Capstone - Tweet Classification System - Catastrophe or Not?"
 author: "Carlos Yáñez Santibáñez"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
@@ -25,9 +25,12 @@ always_allow_html: yes
 
 ```{r, setup, include=FALSE}
 #### WARNING : Running the notebook from scratch, may take SEVERAL HOURS - Run at your own time.####
+### Please go through the below options carefully, ad it will determine how this report will be generated.
 
 ### Options on how to generate this report
 ###Download data from the external source file (done last time on Sat 11 Apr 2020)
+### NOTE: After collation of this report, it was noticed that the source data has been changed - addressing some the issues highlight here. This may alter the results.
+
 download_source_file <- FALSE
 ### Evaluate all chunks- this may take a lot of time and includes "unshortening" t.co URLs
 eval<-FALSE
@@ -78,14 +81,38 @@ source("twitter_classifier.R", echo = F, prompt.echo = "", spaced = F)
 ```
 
 \newpage
+
 # Introduction
 <!-- An introduction/overview/executive summary section that describes the dataset and variables, and summarizes the goal of the project and key steps that were performed. -->
 
+This document presents a machine learning model, whether a particular tweet (message on Twitter.com) is related to a disaster/catastrophic event. This report is the last capstone assignment for HarvardX's Professional Certificate in Data Science, which can be taken at the edX platform. The program is available at   [https://www.edx.org/professional-certificate/harvardx-data-science]( https://www.edx.org/professional-certificate/harvardx-data-science).
 
+This problem has been inspired in a Kaggle's beginner competition called [Real or Not? NLP with Disaster Tweets](https://www.kaggle.com/c/nlp-getting-started). However, the data used in this  data used in this exercise does not come from Kaggle. Instead, it has been downloaded directly from Kaggle's inspiration on figure-eight's  ["Data for Everyone"](https://www.figure-eight.com/data-for-everyone/) webpage. 
+
+Based on that aforementioned dataset, this report proposed an machine learning model that divides each tweet into four constituent components. A prediction for each of the component is made and an overall prediction is created based on those individual results. The four components or attributes are:
+
+* The text/words of the tweet (natural language).
+* The hashtags in the tweet, which should be meaningful labels for the content.
+* The links included in the message. Since links are shared using the t.co shortening services, those will be "unshortened" and classified according their original URL domain.
+*  Any mention to other Twitter users ("handles" in Twitter's terminology).
+
+This work is presented in the following sections:
+1. This **Introduction**.
+2. **Analysis**, which includes:
+2.1 Initial data loading and cleaning into a workable format
+2.2 Initial modelling,  where the prediction algorithm is created.
+2.3  Algorithm Finalisation, where it is tested and refined
+2.4  Tuning of the most relevant parameters
+3. Evaluation of **results** against validation dataset.
+4. **Conclusions**.
+
+The subsequent sections present the above points in further detail.
+
+This file, and its associated R and csv files are available in [Github](https://github.com/carlosyanez/Tweets_Catastrophe_Classification).
 
 \newpage
 # Analysis
-<!-- A methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, any insights gained, and your modeling approach. At least two different models or algorithms must be used, with at least one being more advanced than simple linear regression for prediction problems. -->
+<!-- A methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, any insights gained, and your modelling approach. At least two different models or algorithms must be used, with at least one being more advanced than simple linear regression for prediction problems. -->
 
 As mentioned in the Introduction, this report presents the attempt to build a machine learning model to classify Tweets in a binary model. In this particular case, the question to answer is whether those tweets correspond to a catastrophic event or not. The idea for this was taken of a Kaggle Competition for Starters ([Real or Not? NLP with Disaster Tweets]([https://www.kaggle.com/c/nlp-getting-started])). Instead of using the data provided in Kaggle, in this report the original version in [Data For Everyone](https://www.figure-eight.com/data-for-everyone/) is used.
 
@@ -127,18 +154,18 @@ source_data %>% select(id,target,text=original_text,keyword,location)%>%
   
 ```
 
-As seen above, the dataset cointains the following observations (to match Kaggle's format):
+As seen above, the dataset contains the following observations (to match Kaggle's format):
 
-* **id** : uniqe sequential identifier.
+* **id** : unique sequential identifier.
 * **target** : indicator of whether the tweet corresponds to a catastrophic event (**1**) or not (**0**).
 * **text** : tweet, as extracted from Twitter.
 * **keyword** : search term used in Twitter's search bar to retrieve the tweets.
-* **location** : Name of the place wherre the tweet in question originated.
+* **location** : Name of the place where the tweet in question originated.
 
 For this report, **keyword** and **location** will be ignored, choosing to focus on the text (tweet) only. After a brief observation of its content, in this analysis the text will be divided into four component:
 
 * The text proper. i.e. the *natural language* sentence in the text. In the code, this will be called **words**. All the tweets in this file are written in English language, but they may contain non-English characters, emojis and emoticons.
-* The **hashtags**, which are in user created categorisation. This is a meaningful component of the tweet and may help clarify  whether the message is a real disaster. For example, in below tweet, the hashtag helps us to ellucidate this is  cricket commentary rather than a fire disaster:
+* The **hashtags**, which are in user created categorisation. This is a meaningful component of the tweet and may help clarify  whether the message is a real disaster. For example, in below tweet, the hashtag helps us to elucidate this is  cricket commentary rather than a fire disaster:
 
 ```{r, tweet_hasthag_example,eval=TRUE}
 
@@ -151,14 +178,14 @@ source_data %>% filter(id==1674) %>% select(id,text) %>%
   
 ```
 
-* The **links** contained in the tweet - perhaps the respective Internet domain could help distinguish "quality" disaster sources (e.g. official announcement from relevant authority, The Red Cross/Crescent) from non-disistarr ones (e.g. gossip magazine using hyperbolic language). To obtain meaningful content though, the links need to be "unshortened" from the t.co addresses provided by Twitter.
+* The **links** contained in the tweet - perhaps the respective Internet domain could help distinguish "quality" disaster sources (e.g. official announcement from relevant authority, The Red Cross/Crescent) from non-disaster ones (e.g. gossip magazine using hyperbolic language). To obtain meaningful content though, the links need to be "unshortened" from the t.co addresses provided by Twitter.
 * Who is mentioned in the tweet (by their Twitter **handles**). Similarly to the previous points, it may be useful to distinguish between people reaching out to government/emergency service from *[shock jocks](https://en.wikipedia.org/wiki/Shock_jock)* using florid language.
 
 ## Processing and cleaning up the data
 
 In order to obtain the data in the desired format for analysis, the function *prepare_data* has been created. Its code performs the below activities:
 
-1. Extract hasthags, links and Twitter handles from the tweet.
+1. Extract hashtags, links and Twitter handles from the tweet.
 2. Clean up the remaining text, removing links and handles, and performing transformation operations on emojis,emoticons and other special characters.
 3. (Optional) Replace swear words and profane language with unique strings, in case seeing those wants to be avoided, yet retaining the words for analysis. Please note this report has been generated with the uncensored version, thus results may vary.
 4. "Unshorten" link URLs to obtain domain names of linked sources.
@@ -182,9 +209,9 @@ The first step is similar for the three components - below is the code use to re
 In the following step, both links and mentions are removed, keeping the hashtags since they may also be part of the sentence in question. Then, leveraging the functions in the **[textclean](https://www.rdocumentation.org/packages/textclean/versions/0.9.3)** package, the remaining data is further normalised, by replacing :
 
 * contractions with full words,
-* emojis and emoticos with equivalent word (e.g. :) with 'smile'),
+* emojis and emoticons with equivalent word (e.g. :) with 'smile'),
 * all non-ASCII characters wit equivalent,
-* internet slang with full words,
+* Internet slang with full words,
 * html code,
 * money symbols,
 * numbers with full words,
@@ -340,7 +367,7 @@ write_csv(domains_sanitised,"domains_clean.csv")
 rm(domains_list)
 ```
 
-As result of this processing, we have two data frames to use for further analysis: one with the processed tweets and another with a list of t.co URLs and domains. A sample of boths is shown below:
+As result of this processing, we have two data frames to use for further analysis: one with the processed tweets and another with a list of t.co URLs and domains. A sample of both is shown below:
 
 ```{r, show_processed_data, eval=TRUE}
 
@@ -438,7 +465,7 @@ In order to use a machine learning method that allows us to determine whether an
 
 In the case with text, a simple way to achieve this is to assign each constituent word a score and then use those to calculate a sentence value (with a simple way of calculating such value being adding to individual scores). The following lines explain the way this was done in this particular exercise - please note that as a starting point, we are making them assumption this is a good method - how to determine the right formula is a problem by itself.
 
-Taking the each tweets processed text, the first step is to "tokenise" this dataset, i.e. split it in its component words - for this the function *unnest_tokens* from the *tidytext* package has been used. Since we would like to know how this words are split between catasthropic ("positive") and non-catastrophic ("negative") entries and perhaps use this a scoring base, we will also remove "stop words" (common words such as "and" "or", basic verbs,etc), we will filter them using the *stop_words* dataset available on *tidytext*.
+Taking the each tweets processed text, the first step is to "tokenise" this dataset, i.e. split it in its component words - for this the function *unnest_tokens* from the *tidytext* package has been used. Since we would like to know how this words are split between catastrophic ("positive") and non-catastrophic ("negative") entries and perhaps use this a scoring base, we will also remove "stop words" (common words such as "and" "or", basic verbs,etc..), we will filter them using the *stop_words* dataset available on *tidytext*.
 
 The code to achieve this goes as follows:
 
@@ -472,7 +499,7 @@ p<- training_tokenised$tokenised_words %>% group_by(word) %>%
   geom_point(data=(. %>% filter(word %in% selected_words)),
              color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
   theme(legend.position="bottom") +
-  labs(title="Pos. and neg. ccurrences for each word (log scale)",y="Positives", x = "Negatives") +
+  labs(title="Pos. and neg. occurrences for each word (log scale)",y="Positives", x = "Negatives") +
   theme_grey() +
   geom_abline(color = "gray40", lty = 2)  +
   geom_text_repel(aes(label=ifelse((word %in% selected_words),as.character(word),'')),
@@ -493,7 +520,7 @@ From here, the question is how to take this into a score for each word that:
 
 * Properly weighs "disaster" related words.
 * Penalises "non disaster" words but without reducing the impact of more ambivalent terms.
-* Allows to establish a clear division, so when compoundend it clearly helps to distinguish positives from negatives.
+* Allows to establish a clear division, so when compounded it clearly helps to distinguish positives from negatives.
 
 After thinking how to achieve this objective, a score was defined taken angle of each point in the avoid chart, being this an effective measure of how "positive" or "negative" a word is. If we call this angle $\theta$, we can generate an initial score that looks like the below chart:
 
@@ -530,7 +557,7 @@ $$pre\_score = sin(pos\_proportion)^{\lambda_1}*\frac{\theta}{90 \si{\degree} }$
 $$score = \frac{pre\_score}{max(pre\_score)} - \lambda_2$$
 where
 * $pos\_proportion$: Proportion of times where word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
-* $\lambda_1$: Parametrisation parameter, used to modulate the effect of less relevant words.
+* $\lambda_1$: Parameterisation parameter, used to modulate the effect of less relevant words.
 * $\theta$: angle of vector $(positive\_proportion,negative\_proportion)$, as discussed previously. 
 * $\lambda_2$: Offset to potentially give a negative value to less relevant words, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant words. This will be treated as a tuning parameter.
 
@@ -557,7 +584,7 @@ p
 rm(p,scores1)
 ```
 
-Looking at the chart above, we have achieve the objectives of giving distinct scores depending on the apparent "catastrophe" value of each word. This however, does not reflect the amount of times a word appears - it may be the case that a particular term appears just one and gets an extreme score which is not really a good indicator of its real "catastrophe value. Thus, a last modification of the formula es required:
+Looking at the chart above, we have achieve the objectives of giving distinct scores depending on the apparent "catastrophe" value of each word. This however, does not reflect the amount of times a word appears - it may be the case that a particular term appears just one and gets an extreme score which is not really a good indicator of its real "catastrophe value. Thus, a last modification of the formula is required:
 
 $$score = 
  \begin{cases} 
@@ -567,7 +594,7 @@ $$score =
 
 where
 * $n$ : number of times the word is appears in the training set,
-* $\lambda_3$: arbitrary theshold to filter word with a low number of ocurrences (and possibly biased). This is a tuning parameter.
+* $\lambda_3$: arbitrary threshold to filter word with a low number of occurrences (and possibly biased). This is a tuning parameter.
 
 Using $\lambda_3=10$ for illustration purposes, we have the below chart:
 
@@ -630,7 +657,7 @@ With a set of scores, we would like to know if this produce a set of tweet score
 ```
 
 
-wich, will produce results like the below graphs (for different offset values):
+which, will produce results like the below graphs (for different offset values):
 
 
 ```{r tweet_scores, eval=TRUE}
@@ -666,7 +693,7 @@ rm(score2,score3,offset,p1,p2,p3,p4)
 
 From the above, we can see that there is a diffuse division between positive and negative tweets. It is worth noticing this could potentially be improved with better modelling - however this could a problem but itself and the above - with tuning - is deemed acceptable for a first approximation. 
 
-A similar process has been done two create tweet scores for hasthags, links(or rather the domains of the unshorten URLs) and mentions. After try and error, a slightly different formula has been chosen for these three observations, represented below for hasthags:
+A similar process has been done two create tweet scores for hashtags, links(or rather the domains of the unshorten URLs) and mentions. After try and error, a slightly different formula has been chosen for these three observations, represented below for hashtags:
 
 $$pre\_score= \left( \frac{pos\_proportion}{\lambda_1} \right)^{\lambda_{2}} \cdot \frac{\theta}{90}$$
 $$ score =
@@ -677,12 +704,12 @@ $$ score =
 
 where 
 
-* $pos\_proportion$ is the proportion of the term in the entire corpus of positive hasthags/domains/mentions,
+* $pos\_proportion$ is the proportion of the term in the entire corpus of positive hashtags/domains/mentions,
 * $\lambda_1$ tuning parameter that re-scales - everything above the threshold is relevant, the rest not so much,
-* $\lambda_2$ tuning parameter to weigh down irrelavent terms and weigh up relevent ones,
+* $\lambda_2$ tuning parameter to weigh down irrelevant terms and weigh up relevant ones,
 * $\theta$ angle of vector $(negatives,positives)$,
 * $\lambda_3$, Offset to potentially give a negative value to less relevant term, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant term This will be treated as a tuning parameter.
-* $\lambda_4$, threshold of number of ocurrences necessary to consider the score as valid.
+* $\lambda_4$, threshold of number of occurrences necessary to consider the score as valid.
 
 
 The below charts show an example of score generated using this method:
@@ -700,7 +727,7 @@ scores3<-score_tweets(training0,training_tokenised,scores2)
 
 p1<- scores3$vector %>% filter(!is.na(hashtag_score)) %>%
   ggplot(aes(id,hashtag_score,color=target)) +geom_point() + theme(legend.position="bottom") +
-  labs(title=paste("Hasthag Score"),x="id", y = "Score") +
+  labs(title=paste("Hashtag Score"),x="id", y = "Score") +
   theme_grey()
 p2<- scores3$vector %>% filter(!is.na(link_score)) %>%
   ggplot(aes(id,hashtag_score,color=target)) +geom_point() + theme(legend.position="bottom") +
@@ -718,11 +745,11 @@ rm(p1,p2,p3,scores2,scores3)
 
 In order to facilitate the next steps, the above process has been written into three functions, namely:
 
-* **tokenise_data**, which takes the data in the pre-processed format and generates a dataframes with the token words, hasthags, domains and Twitter handles.
+* **tokenise_data**, which takes the data in the pre-processed format and generates a data frames with the token words, hashtags, domains and Twitter handles.
 * **calculate_scores**,which takes the output of the previous function (*tokenised* data) and calculate the scores for each word, hashtag, link and handle. All the previously discussed tuning parameter have been defined as inputs for this function.
-* **score_tweets**, which will generate a score for earch tweeet for each of categories previously mentioned.
+* **score_tweets**, which will generate a score for each tweet for each of categories previously mentioned.
 
-All these functions are written in the accompanying .R file, with inline commentary explaining all the steps involved in the process.
+All these functions are written in the accompanying .R file, with in-line commentary explaining all the steps involved in the process.
 
 ## Finalising the model and data quality.
 
@@ -740,7 +767,7 @@ For this process, two functions have been written in this report .R file:
 
 These functions leverage the caret package and they have been written to provide some flexibility - for example **fit_model** allows to be run using different machine learning models. For further details, please refer to the detailed commentary in the .R file.
 
-For the initial run - that will help us establish and initial benchmark - the general linear model (glm) in caret is used for the indidivual predictions. For the aggregate preidction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
+For the initial run - that will help us establish and initial benchmark - the general linear model (glm) in caret is used for the individual predictions. For the aggregate prediction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
 
 
 ```{r first_prediction}
@@ -763,16 +790,19 @@ results_1$eval %>% select(Method=eval,Accuracy=result_agg) %>%
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","HOLD_position")) 
 
+
+```
+
+
+```{r confusion_matrix11, eval=TRUE}
+
 if(eval==TRUE){
   results_comparison <- tibble(attempt=numeric(),accuracy=numeric())
   results_comparison <- add_row(results_comparison,
                               attempt="Initial training",
                               accuracy=results_1$eval[which(results_1$eval$eval=="aggregate"),]$result_method)
 }
-```
 
-
-```{r confusion_matrix11, eval=TRUE}
 results_1_cm <- confusionMatrix(results_1$results$target,results_1$results$aggregate)
 fourfoldplot(results_1_cm$table,
              color = c("#B22222", "#2E8B57"),
@@ -787,9 +817,10 @@ rm(results_1_cm)
 As observed, there are large number of false positives and false negatives. A sample of those is provided below:
 
 ```{r result_1_FP,eval=TRUE}
+orig_FP<-c(269,3581,1026,9779,10380,10402)
 results_1$results_extended %>% filter(category == "FP")  %>%
   select(id,target,original_text)  %>%
-  filter(id %in% c(269,3581,1026,9779,10380,10402)) %>%
+  filter(id %in% orig_FP) %>%
   kable(caption="Initial results - False Positives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
@@ -798,10 +829,10 @@ results_1$results_extended %>% filter(category == "FP")  %>%
 ```
 
 ```{r result_1_FN,eval=TRUE}
-
+orig_FN <- c(3,253,1172,1968,6571)
 results_1$results_extended %>% filter(category == "FN")  %>%
   select(id,target,original_text)  %>%
-  filter(id %in% c(3,253,1172,1968,6571)) %>%
+  filter(id %in% orig_FN) %>%
   kable(caption="Initial results - False Negatives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
@@ -809,7 +840,7 @@ results_1$results_extended %>% filter(category == "FN")  %>%
 
 ```
 
-A more detailed review of both sets, seems to indicated that the source file curation does seem to contain some errors : tweets that are seemingly not a catastrophe are tagged as such and vicerversa. One particular example of this are tweets allusive to the Hiroshima bombing in World War 2. Although those tweets a tragedy remembrance and do not carry the connotation of a current catastrophe, there are marked as "disaster" in the dataset.
+A more detailed review of both sets, seems to indicated that the source file curation does seem to contain some errors : tweets that are seemingly not a catastrophe are tagged as such and vice-versa. One particular example of this are tweets allusive to the Hiroshima bombing in World War 2. Although those tweets a tragedy remembrance and do not carry the connotation of a current catastrophe, there are marked as "disaster" in the dataset.
 
 ```{r hiroshima_tweets,eval=TRUE}
 results_1$results_extended %>% filter(grepl("Hiroshima",text)) %>% select(id,target,original_text)  %>%
@@ -824,7 +855,7 @@ The above reflects two important problems with machine learning and natural lang
 1. This re-enforces that quality training data is essential. Bad data will probably result in bad results - even with a very sophisticated algorithm (It's called *Data* Science after all!).
 2. Human language is complicated. Meaning of each word is highly contextual and changes depending on the register, dialect and over time. This can be difficult for a machine learning model to **grasp**.
 
-To illustrate the second point, the above false positives and false negatives have been manually review and their new positive/negative result has been modified accordingly and added into the original data set. After feeding them back into the trainig dataset, selecting a new testing sample and running the machine learning model again, the below results are obtained:
+To illustrate the second point, the above false positives and false negatives have been manually review and their new positive/negative result has been modified accordingly and added into the original data set. After feeding them back into the training dataset, selecting a new testing sample and running the machine learning model again, the below results are obtained:
 
 ```{r corrected_results0}
 corrections <- "target_corrected.csv"
@@ -840,24 +871,32 @@ if(!file.exists(manual_scores)){
 
 corrected_data <- read_csv(corrections)
 manual_scores <-  read_csv(manual_scores)
-initial_results <- results_1$results_extended
 
-initial_results <- initial_results %>% left_join(corrected_data,by="id") %>% 
+initial_set <- rbind(training0,test0)
+q1 <- 0.1*round(nrow(initial_set),0)
+
+corrected_results <- initial_set %>% left_join(corrected_data,by="id") %>% 
   mutate(target=ifelse(is.na(target_corrected),target,target_corrected)) %>% 
+  filter(!is.na(target_corrected)) %>%
   select(id,target,text,keyword,location,hashtag,link,mention,original_text)
 
+mixing_set <- initial_set %>% anti_join(corrected_data,by="id")
+q2 <- nrow(mixing_set)
+percent_value <- q1/q2
+  
 version_number<-as.double(version$minor)/10+as.double(version$major)
 if(version_number<3.6){
   set.seed(200)
 }else{
     set.seed(200, sample.kind="Rounding")
 }
-training_old <-training0
-test_index <- createDataPartition(y = training_old$id, times = 1, p = 0.12, list = FALSE)
-training<- training_old[-test_index,]
-test <- training_old[test_index,]
 
-training <- rbind(training,initial_results)
+test_index <- createDataPartition(y = mixing_set$id, times = 1, p = percent_value, list = FALSE)
+training<- mixing_set[-test_index,]
+test <- mixing_set[test_index,]
+
+training <- rbind(training,corrected_results)
+rm(q1,q2,initial_set,mixing_set,percent_value,corrected_results)
 ```
 
 ```{r corrected_results1}
@@ -889,7 +928,7 @@ if(eval==TRUE){
 
 This illustrates that better training data can lead to better results. It is also worth noticing this may well reflect a real-life scenario, where a social media monitoring centre is constantly reviewing false negatives and false negatives with the purpose of keep re-training a model to adapt to changes language, emerging events, etc.
 
-Of course, the other components in the model can also benefit of this *curated* approach. In this report, and for illustraition process - the  list of hasthags in thre training set has been reviewed and then detected a couple of hashtags that most probably mean catasthrophe (e.g. like #earthquake most like means one) and other most probably won't (like #ashes2017, which is unmistakebly cricket, not matter how colourful and hiperbolic is language).
+Of course, the other components in the model can also benefit of this *curated* approach. In this report, and for illustration purposes - the  list of hashtags in the training set has been reviewed and then detected a couple of hashtags that most probably mean catastrophe (e.g. like #earthquake most like means one) and other most probably won't (like #ashes2017, which is unmistakable cricket, not matter how colourful and hyperbolic is the language).
 
 Using a sample set of curated hashtag, it is possible to observe a small increment in accuracy. Handles and links will be left as a action to improve for the time being.
 
@@ -933,13 +972,13 @@ results_comparison[1:3,] %>%
 
 With this new, *augmented* dataset the next step of the process is to tune the model. Looking at how the model it's constructed, there are *many* aspects to tune, namely:
 
-* The parameters used to calculate the tweet, hasthag, link and mention scores.
+* The parameters used to calculate the tweet, hashtag, link and mention scores.
 * The selection of classification algorithms used.
-* The tunning parameters of each selection algorithm.
+* The tuning parameters of each selection algorithm.
 
-Obviously, tuning every single parameter will result in quite a lengthy excercise. Instead, this report will focus on some of the key components in this model and discus what works and what else could be done.
+Obviously, tuning every single parameter will result in quite a lengthy exercise. Instead, this report will focus on some of the key components in this model and discus what works and what else could be done.
 
-The first aspect to tune is the each word in the training corpus gets a indvidual score. This is perhaps the key component of the model. From the previous section, we have that this score is calculated through the below formulas:
+The first aspect to tune is the each word in the training corpus gets a individual score. This is perhaps the key component of the model. From the previous section, we have that this score is calculated through the below formulas:
 
 $$pre\_score = sin(pos\_proportion)^{\lambda_1}*\frac{\theta}{90 \si{\degree} }$$
 $$score = 
@@ -951,13 +990,13 @@ $$score =
 
 where
 * $pos\_proportion$: Proportion of times where word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
-* $\lambda_1$: Parametrisation parameter, used to modulate the effect of less relevant words.
+* $\lambda_1$: Parameterisation parameter, used to modulate the effect of less relevant words.
 * $\theta$: angle of vector $(positive\_proportion,negative\_proportion)$, as discussed previously. 
 * $\lambda_2$: Offset to potentially give a negative value to less relevant words, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant words. This will be treated as a tuning parameter.
 * $n$ : number of times the word is appears in the training set,
-* $\lambda_3$: arbitrary theshold to filter word with a low number of ocurrences (and possibly biased). This is a tuning parameter.
+* $\lambda_3$: arbitrary threshold to filter word with a low number of occurrences (and possibly biased). This is a tuning parameter.
 
-In this report, $\lambda_2$ and $\lambda_3$ will be tuned, to see how the penalisation of irrelevant words and minimum number of ocurrences affect the model. The results of tuning lambda_2 are shown below.
+In this report, $\lambda_2$ and $\lambda_3$ will be tuned, to see how the penalisation of irrelevant words and minimum number of occurrences affect the model. The results of tuning lambda_2 are shown below.
 
 ```{r word_lambda_2_tuning}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
@@ -1004,7 +1043,7 @@ results_comparison <- add_row(results_comparison,
 
 As shown above, the best result is obtained with $lambda_2$=`r word_lambda_2`. It is also worth noticing that increasing this value won't necessarily result in better results, since it will then penalise "neutral" terms too.
 
-With this value, we will then also find if there is an optimal $\lambda_3$, i.e. to see if removing the words that appear seldomly have an negative impact in the model. The results are shown below:
+With this value, we will then also find if there is an optimal $\lambda_3$, i.e. to see if removing the words that rarely appear have an negative impact in the model. The results are shown below:
 
 
 ```{r word_lambda_3_tuning}
@@ -1052,7 +1091,7 @@ results_comparison <- add_row(results_comparison,
 ```
 
 
-This result is a bit more interesting. As observed above, the first optimal $\lambda_3$ is quite a low value, however there is a relative bigger decrease in accuracy around its neighbours when compared against the second best $\lambda_3$. It is important to notice that the accuracy  depends on the corpus of words in the test set and how they are combined into sentences. This is of course random and it will change from set to set. Even though we can do cross validation, perhaps it is not a bad a idea (as an initial step), choose a perhaps sub-optimal value for the sake of consistency - at least until more thorough tuning is possible. Therefore, to continue with this excercise, a value of $lambda_3$=`r word_lambda_3` has been chosen.
+This result is a bit more interesting. As observed above, the first optimal $\lambda_3$ is quite a low value, however there is a relative bigger decrease in accuracy around its neighbours when compared against the second best $\lambda_3$. It is important to notice that the accuracy  depends on the corpus of words in the test set and how they are combined into sentences. This is of course random and it will change from set to set. Even though we can do cross validation, perhaps it is not a bad a idea (as an initial step), choose a perhaps sub-optimal value for the sake of consistency - at least until more thorough tuning is possible. Therefore, to continue with this exercise, a value of $lambda_3$=`r word_lambda_3` has been chosen.
 
 After the word scoring, perhaps the most relevant component in the model is the scoring function for hashtags (given that hashtag intend to be **meaningful** descriptors). Similarly to the word scoring, we will tune the equivalent parameters hashtag's $lamdba_2$ and $lamdba_3$.
 
@@ -1103,12 +1142,12 @@ rm(p1,p2)
 hashtag_lambda_2 <- 0.5
 ```
 
-The first graph shows the overall accuracy results (comparable to the word tuning), while the second graph shows the results where there is a hasthag. From them, the following points can be made:
+The first graph shows the overall accuracy results (comparable to the word tuning), while the second graph shows the results where there is a hashtag. From them, the following points can be made:
 
-* Smaller variations in the overall score can be explained to the fact that not all tweets have hasthags, thus the effect of tuning this part of the model will obvisouly have a limited effect on the general result.
-* Taking the above point, it looks like its contribution to general score it is mostly when hasthags do indicate a cathastrophe (and therefore have a bigger score). It is worth noticing that many of the high-score hashtag were not ranked by the algorithm but manually added - which is perhaps and indication that manual curation is not necessarily a bad idea - especially when data is poor quality or insufficient.
+* Smaller variations in the overall score can be explained to the fact that not all tweets have hashtags, thus the effect of tuning this part of the model will obviously have a limited effect on the general result.
+* Taking the above point, it looks like its contribution to general score it is mostly when hashtags do indicate a catastrophe (and therefore have a bigger score). It is worth noticing that many of the high-score hashtag were not ranked by the algorithm but manually added - which is perhaps and indication that manual curation is not necessarily a bad idea - especially when data is poor quality or insufficient.
 
-With this mind, the tuning of $lamdba_3$ will help to determine the overall effect of hashtag occurence. The results are shown in the below chart.
+With this mind, the tuning of $lamdba_3$ will help to determine the overall effect of hashtag occurrence. The results are shown in the below chart.
 
 ```{r hashtag_lambda_3}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
@@ -1152,7 +1191,7 @@ results_comparison <- add_row(results_comparison,
 
 This result seems similar in nature to the tuning for quantity cut-off for the word scoring.
 
-Looking at the results so far (table below), this tuning process has only resulted in small gains when compared with the initial data corrections. Taking that the effect of hasthag tuning is small, in this report the tuning of the links and handle scoring functions will not be conducted. This doesn't mean they may bring an improved accuracy but perhaps are not worth the effort given the existing training dataset.
+Looking at the results so far (table below), this tuning process has only resulted in small gains when compared with the initial data corrections. Taking that the effect of hashtag tuning is small, in this report the tuning of the links and handle scoring functions will not be conducted. This doesn't mean they may bring an improved accuracy but perhaps are not worth the effort given the existing training dataset.
 
 ```{r results_comparison_2,eval=TRUE}
 results_comparison[1:6,] %>%
@@ -1187,12 +1226,12 @@ stats_5_1 <- results$eval
 scores$hashtags
 ```
 
-Instead, the decission is to focus on the tuning of the classification functions. At this point, the model uses the caret package to leverage to known machine learning algorithms, namely:
+Instead, the decision is to focus on the tuning of the classification functions. At this point, the model uses the caret package to leverage to known machine learning algorithms, namely:
 
-* *glm* (as in generalised linear model) in its logisitc regression mode to turn word, hashtag, link and mention to make a prediction on those components independently.
+* *glm* (as in generalised linear model) in its logistic regression mode to turn word, hashtag, link and mention to make a prediction on those components independently.
 * *xgbTree* (extreme gradient boosting) to predict an "overall" positive or negative based on the previous predictions.
 
-Considering that the assignment instructions state  **"For this project, you will be applying machine learning techniques that go beyond standard linear regression"**, the next stage will be to asses if there is any model that produces better results than glm. (Although so far this is not a **standard**  linear regression model anymore.)
+Considering that the assignment instructions state  **"For this project, you will be applying machine learning techniques that go beyond standard linear regression"**, the next stage will be to asses if there is any model that produces better results than glm. (Although so far this is not a **standard**  linear regression model any more.)
 
 After investigating a number of possible algorithms, the [**LogitBoost**](https://en.wikipedia.org/wiki/LogitBoost) will use as comparison. This algorithm is available in R through the [**caTools**](https://www.rdocumentation.org/packages/caTools/versions/1.17.1/topics/LogitBoost) package.
 
@@ -1306,15 +1345,10 @@ results_comparison <- add_row(results_comparison,
 rm(p1,p2,p3)
 ```
 
-In this case, the accuracy value equals  **`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`**, which is no better than the classification using a logistic regresion.  
+In this case, the accuracy value equals  **`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`**, which is no better than the classification using a logistic regression.  
 
 This results shouldn't be confusing - a more "sophisticated" method does not necessarily mean a better result  the important thing is to find the model that better represents the problem at hand (when possible). Simpler models may also have an advantage in terms of processing time - which may be a key factor to consider even if other models perform marginally better. 
 
-
-```{r}
-#to check only
-aggregate_model_2$bestTune
-```
 
 Completed the above steps, there is one aspect left to tune : the XGBoost algorithm. This method has several parameters, for which a good explanation of them can be found [here](https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/beginners-tutorial-on-xgboost-parameter-tuning-r/tutorial/). 
 
@@ -1387,15 +1421,15 @@ results_comparison %>%
   kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
 
-As shown above, the greatest gains in accuracy are due to the data correction and the tuning of the word scoring formula. Further tuning only produces worse or marginally better results (from hashtag optimisation to optimised XGBoost, for example). Furthermore, the first impresion is that perhaps there is a ceiling that has been reached, perhaps due to the limitation of the model or quality of the training data (bad inputs -> bad results).
+As shown above, the greatest gains in accuracy are due to the data correction and the tuning of the word scoring formula. Further tuning only produces worse or marginally better results (from hashtag optimisation to optimised XGBoost, for example). Furthermore, the first impression is that perhaps there is a ceiling that has been reached, perhaps due to the limitation of the model or quality of the training data (bad inputs -> bad results).
 
 Nevertheless, up to this point we have try touched all the relevant aspects of the model. Therefore (for the purpose of the this assignment), the only step left is to assess against the validation data and then comment based on those results.
 
 \newpage
 # Results
-<!-- A results section that presents the modeling results and discusses the model performance. -->
+<!-- A results section that presents the modelling results and discusses the model performance. -->
 
-As the last step of this report, the model has been assessed against the **validation** dataset that was set aside a the beginning of this excercise. In order to acomplish this, the below steps have been followed:
+As the last step of this report, the model has been assessed against the **validation** dataset that was set aside a the beginning of this exercise. In order to accomplish this, the below steps have been followed:
 
 1. **Training** and **test** set have been merged into one dataset.
 2. The model has been trained against this new dataset.
@@ -1484,7 +1518,7 @@ results_validation$results_extended %>%  filter(category=="FN") %>%
 
 ```
 
-After inspecting for set, it looks like there is a problem of misclassification with the false negatives. In this case the model *correctly* predicts most of them as not a disaster tweet. However, upon inspection it seems the model is clearly *incorrectly* classifying most of all false positives. It is worth noticing though that all of them contain "catasthrophe" words. A possible reason of this that the model is mostly driven by the words rather than the other attributes and its limited lexicon results in wrong scores for those tweets. Fortunately, it is possible to see for those tweets whether a prediction for each component was generated of not, which is shown in the below charts, for false positives and all validation tweets.
+After inspecting for set, it looks like there is a problem of misclassification with the false negatives. In this case the model *correctly* predicts most of them as not a disaster tweet. However, upon inspection it seems the model is clearly *incorrectly* classifying most of all false positives. It is worth noticing though that all of them contain "catastrophe" words. A possible reason of this that the model is mostly driven by the words rather than the other attributes and its limited lexicon results in wrong scores for those tweets. Fortunately, it is possible to see for those tweets whether a prediction for each component was generated of not, which is shown in the below charts, for false positives and all validation tweets.
 
 ```{r validation_predictions_fp, eval=TRUE}
 agg_summary <- results_validation$results_extended %>%
@@ -1570,7 +1604,7 @@ rbind(absent,present) %>% group_by(target) %>%
   summarise(q=n()) %>% ungroup %>%
   ggplot(aes(x=target,y=q,label=q)) +
    geom_col(fill="#FFDB6D") +
-  labs(title="Validation Words - Presence in Training Lexicom",x="Presence", y = "Count") +
+  labs(title="Validation Words - Presence in Training Lexicon",x="Presence", y = "Count") +
   theme(axis.text.x = element_text(angle = 25, hjust = 1)) +
   geom_text(position = position_stack(vjust = 0.5))+
   theme_grey() 
@@ -1585,9 +1619,26 @@ The consequence of this will be incorrect or incomplete scoring - this is one pr
 # Conclusion
 <!-- A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work. -->
 
-In this report
+In this report, we have attempted to create a machine learning model that correctly predicts whether a tweet correspond to a *disaster* or *catastrophic* event. A model to achieve this has been proposed, which combines individual predictions for each of the key available attributes of each tweet into a combined score, using the XGBoost algorithm. Through, successive data corrections and tuning the model the results were incrementally improved. Tested against the validation set, an accuracy of **`r results_validation$eval[which(results_validation$eval$eval=="aggregate"),]$result_method`**. 
 
+Clearly, the presented is far from perfect. However through its flaws it was possible to draw a number of valuable conclusions which reflect relevant challenges applicable both in this particular case and in general practice. These main take aways are:
 
-* Good quality data matters. Bad input means bad results.
-* Sometimes manual curation will improve the results.
-* There is so much to tune.
+* A good quality training dataset is essential. Poorly curated training data will probably result in substandard predictions (the discipline is called **Data** Science after all!)
+* Like in problem in Science/Engineering, coming up with a model that properly fits the problem is also essential. There aren't universal solutions and more *sophisticated* and popular models are not silver bullets. Sometimes, simpler linear models will be the best available fit - considering both accuracy, computing resources and the intention behind solving the problem.
+* Tuning can be an enormous undertaking. Again, it is important to understand the purpose of behind the problem and be practical.
+* In relation to this problem, natural language can be especially challenging. A simple model like this cannot really interpret meaning the same way a human does. The dictionary is always growing and changing - even one word can mean different things.
+
+If someone would like to continue this work, there are multiple paths to keep exploring, namely:
+
+* First, seek for a better dataset and run again to see the effects. Better dataset not only means the right classification but also:
+** a greater proportion of hashtags, links and handles to see how they can better supplement the words in the tweet.
+** a more diverse vocabulary to have a better collection of disaster and non-disaster words.
+* In addition, a dataset with other property would be able also help to improve this model, for instance:
+** rate tweets based on user ids (e.g. identify MMORPG players, shock jocks, emergency institutions, earthquake watchers,etc.).
+** add a time and location function, which can be cross-referenced with other sources for catastrophic events (e.g. give a higher rating to all tweets from a particular city when a natural disaster strikes)
+* Also, it would be interesting to see how this model rates against other natural language classification problems, like the [Onion or Not dataset in Kaggle](https://www.kaggle.com/chrisfilo/onion-or-not/kernels).
+ 
+ 
+Last but definitely not least, this model needs better a mathematical justification behind the scoring functions. Those functions were defined to fit the expected results, but a better statistical understanding is required. This may be a big task but perhaps a necessary one to produce a "production" quality model.
+
+<!-- EOF -->
