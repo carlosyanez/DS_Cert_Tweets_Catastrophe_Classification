@@ -4,6 +4,7 @@ author: "Carlos Yáñez Santibáñez"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 output:
   pdf_document:
+    latex_engine: pdflatex
     fig_caption: yes
     includes:
       in_header: header_includes.tex
@@ -97,12 +98,9 @@ Based on that aforementioned dataset, this report proposed an machine learning m
 *  Any mention to other Twitter users ("handles" in Twitter's terminology).
 
 This work is presented in the following sections:
+
 1. This **Introduction**.
-2. **Analysis**, which includes:
-2.1 Initial data loading and cleaning into a workable format
-2.2 Initial modelling,  where the prediction algorithm is created.
-2.3  Algorithm Finalisation, where it is tested and refined
-2.4  Tuning of the most relevant parameters
+2. **Analysis**, which includes: 1. Initial data loading and cleaning into a workable format 2. Initial modelling,  where the prediction algorithm is created. 3.  Algorithm Finalisation, where it is tested and refined 4.  Tuning of the most relevant parameters
 3. Evaluation of **results** against validation dataset.
 4. **Conclusions**.
 
@@ -114,9 +112,9 @@ This file, and its associated R and csv files are available in [Github](https://
 # Analysis
 <!-- A methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, any insights gained, and your modelling approach. At least two different models or algorithms must be used, with at least one being more advanced than simple linear regression for prediction problems. -->
 
-As mentioned in the Introduction, this report presents the attempt to build a machine learning model to classify Tweets in a binary model. In this particular case, the question to answer is whether those tweets correspond to a catastrophic event or not. The idea for this was taken of a Kaggle Competition for Starters ([Real or Not? NLP with Disaster Tweets]([https://www.kaggle.com/c/nlp-getting-started])). Instead of using the data provided in Kaggle, in this report the original version in [Data For Everyone](https://www.figure-eight.com/data-for-everyone/) is used.
+As mentioned in the **Introduction**, this report presents an attempt to build a machine learning model to classify tweets. In this particular case, the question to answer is if those tweets correspond to a catastrophic event or not. The idea for this was taken of a Kaggle Competition for Starters ([Real or Not? NLP with Disaster Tweets]([https://www.kaggle.com/c/nlp-getting-started])). Instead of using the data provided in Kaggle, in this report the original version in [Data For Everyone](https://www.figure-eight.com/data-for-everyone/) is used.
 
-To start, let's have look at sample data:
+To start, let's have look at a sample of dataset:
 
 ```{r, download_source_file}
 #download data
@@ -154,18 +152,18 @@ source_data %>% select(id,target,text=original_text,keyword,location)%>%
   
 ```
 
-As seen above, the dataset contains the following observations (to match Kaggle's format):
+As seen above, the dataset contains the following observations:
 
 * **id** : unique sequential identifier.
 * **target** : indicator of whether the tweet corresponds to a catastrophic event (**1**) or not (**0**).
 * **text** : tweet, as extracted from Twitter.
 * **keyword** : search term used in Twitter's search bar to retrieve the tweets.
-* **location** : Name of the place where the tweet in question originated.
+* **location** : Name of the place where the message originated.
 
-For this report, **keyword** and **location** will be ignored, choosing to focus on the text (tweet) only. After a brief observation of its content, in this analysis the text will be divided into four component:
+For this report, **keyword** and **location** will be ignored, choosing to focus on the text (tweet) only. After inspection of its content,  the text will be divided into four components (or attributes):
 
-* The text proper. i.e. the *natural language* sentence in the text. In the code, this will be called **words**. All the tweets in this file are written in English language, but they may contain non-English characters, emojis and emoticons.
-* The **hashtags**, which are in user created categorisation. This is a meaningful component of the tweet and may help clarify  whether the message is a real disaster. For example, in below tweet, the hashtag helps us to elucidate this is  cricket commentary rather than a fire disaster:
+* The text proper. i.e. the *natural language* sentence in the text. In the report, this will be called **text** or **words**. All the tweets in this file are written in English language, but they may contain non-English characters, emojis and emoticons.
+* The **hashtags**, which are  user-created categories. This is a meaningful component of the tweet and may help clarify  whether the message is a real disaster. For example, in the below tweet, the hashtag helps us to elucidate this is cricket commentary rather than a fire event:
 
 ```{r, tweet_hasthag_example,eval=TRUE}
 
@@ -178,19 +176,19 @@ source_data %>% filter(id==1674) %>% select(id,text) %>%
   
 ```
 
-* The **links** contained in the tweet - perhaps the respective Internet domain could help distinguish "quality" disaster sources (e.g. official announcement from relevant authority, The Red Cross/Crescent) from non-disaster ones (e.g. gossip magazine using hyperbolic language). To obtain meaningful content though, the links need to be "unshortened" from the t.co addresses provided by Twitter.
+* The **links** contained in the tweet. These are presented as a t.co link (Twitter's link sharing service). In this format they are not much information, but it is possible to retrieve the original URLs. This can provide further insight into the nature of the message - e.g. if the user is sharing a link to a disaster management agency or a sports website.
 * Who is mentioned in the tweet (by their Twitter **handles**). Similarly to the previous points, it may be useful to distinguish between people reaching out to government/emergency service from *[shock jocks](https://en.wikipedia.org/wiki/Shock_jock)* using florid language.
 
 ## Processing and cleaning up the data
 
-In order to obtain the data in the desired format for analysis, the function *prepare_data* has been created. Its code performs the below activities:
+In order to obtain the data in a useful format, the function *prepare_data* has been created. Through its code, this functions conducts the following tasks:
 
 1. Extract hashtags, links and Twitter handles from the tweet.
-2. Clean up the remaining text, removing links and handles, and performing transformation operations on emojis,emoticons and other special characters.
-3. (Optional) Replace swear words and profane language with unique strings, in case seeing those wants to be avoided, yet retaining the words for analysis. Please note this report has been generated with the uncensored version, thus results may vary.
+2. Clean up the remaining text, remove links and handles, and "translate"  emojis,emoticons and other special characters.
+3. (Optional) Replace swear words and profane language with unique strings, in case their reading needs to be avoided, yet retaining the words for analysis. Please note this report has been generated with the uncensored version, thus results may vary if the "sanitised" version is used.
 4. "Unshorten" link URLs to obtain domain names of linked sources.
 
-The first step is similar for the three components - below is the code use to remove the hashtags:
+In this function, the first step is similar for the three components - below is the code use to remove the hashtags:
 
 ```{r hasthag_removal_code, echo=TRUE, eval=FALSE}
 
@@ -206,16 +204,16 @@ The first step is similar for the three components - below is the code use to re
 ```
 
 
-In the following step, both links and mentions are removed, keeping the hashtags since they may also be part of the sentence in question. Then, leveraging the functions in the **[textclean](https://www.rdocumentation.org/packages/textclean/versions/0.9.3)** package, the remaining data is further normalised, by replacing :
+Then both links and mentions are removed, keeping the hashtags since they may also be part of the sentence in question. Then, leveraging the functions in the **[textclean](https://www.rdocumentation.org/packages/textclean/versions/0.9.3)** package, the remaining data is further normalised, by replacing :
 
 * contractions with full words,
 * emojis and emoticons with equivalent word (e.g. :) with 'smile'),
-* all non-ASCII characters wit equivalent,
+* all non-ASCII characters with its equivalent ASCII-compliant character,
 * Internet slang with full words,
 * html code,
 * money symbols,
 * numbers with full words,
-* ordinals with full words replace_ordinal,
+* ordinals with full words,
 * timestamps.
 
 The code that achieves this is shown below:
@@ -311,7 +309,7 @@ An optional step is to remove swear and profane vocabulary from the text, in cas
   }
 ```
 
-As a last step, the function *expand_urls* from the *longurl* package has been leveraged to unshorten the t.co URLs, to obtain the domains of the links. This is done trough the below code:
+As a last step, the function *expand_urls* from the *longurl* package has been used to obtain the true domain names from the *t.co* URLs. This is done trough the below code:
 
 ```{r, get_domains, echo=TRUE, eval=FALSE}
 
@@ -373,7 +371,7 @@ As result of this processing, we have two data frames to use for further analysi
 
 processed_source %>% filter(id %in% c(1,6,33,49,160,914,3999,7336)) %>% 
   select(id,target,text,hashtag,link,mention) %>%
-  kable(caption="Sample Data",format = "latex", booktabs = TRUE,
+  kable(caption="Processed Data - Sample",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "15em") %>%
   kable_styling(latex_options =c("striped","hold_position","scale_down")) 
@@ -384,7 +382,7 @@ processed_source %>% filter(id %in% c(1,6,33,49,160,914,3999,7336)) %>%
 ```{r, show_domains_data,eval=TRUE}
   domains_data %>% mutate(id=seq.int(nrow(domains_data))) %>% 
   filter(id %in% c(1,2,37,39,208,211,512,513)) %>%  select(-id) %>%
-  kable(caption="Sample Data",format = "latex", booktabs = TRUE,
+  kable(caption="t.co to Domain Translation - Sample",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","hold_position")) 
   
@@ -482,7 +480,14 @@ The code to achieve this goes as follows:
                             anti_join(stop_words, by="word") 
 ```
 
-With the data, we can calculate how frequent each word is, in general and in both positive and negative tweets. The chart below shows this, highlighting some selected words for analysis:
+With this action, we effectively have created a dictionary of all word in the training set, mapped against the times where have beeen used in *catastrophic* (positives) and *non-catastrophic* (tweets). With this data, it would be terrific if we could build and indicator to represented how *catastrophic* each word is - which in turn can be use to calculate scores for new tweets. Ideally, this score should meet the following criteria:
+
+* Properly weighs "disaster" related words.
+* Penalises "non disaster" words
+* Sits in the middle for more ambivalent terms.
+* Creates a clear division, so when compounded into a tweet value it clearly helps to distinguish positives from negatives.
+
+From the data at hand, it looks easy to start with a calculation of how frequent each word is, in general and in both positive and negative tweets. The chart below shows this, highlighting some selected words:
 
 ```{r word_numbers, eval=TRUE}
 selected_words<- c("tongue","typhoon","suicide","fires","body","laughing","survive",
@@ -514,15 +519,7 @@ p
 rm(p)
 ```
 
-Since we are looking at the impact of the word for a tweet being positive, the above chart can be reduced to one indicator, the proportion each words appears positive tweets against its total number of appearances.
-
-From here, the question is how to take this into a score for each word that:
-
-* Properly weighs "disaster" related words.
-* Penalises "non disaster" words but without reducing the impact of more ambivalent terms.
-* Allows to establish a clear division, so when compounded it clearly helps to distinguish positives from negatives.
-
-After thinking how to achieve this objective, a score was defined taken angle of each point in the avoid chart, being this an effective measure of how "positive" or "negative" a word is. If we call this angle $\theta$, we can generate an initial score that looks like the below chart:
+From this chart, we can see that the angle (of the (negative,positive) vector) shows how words relate to positive tweets. This angle can be easily obtained with a cartesian to polar conversion. If we call the angle $\theta$, we can generate an initial score that looks like the below chart (chart against positive percentages for visualisation convenience).
 
 
 ```{r theta_chart, eval=TRUE}
@@ -550,18 +547,20 @@ rm(p)
 ```
 
 
-Although this is a good approach, after several iterations the following formula has been chosen instead:
+From this point, the formula has been refined to penalised non-disaster words. After several iterations, we have come up with the following formula:
 
 $$pre\_score = sin(pos\_proportion)^{\lambda_1}*\frac{\theta}{90 \si{\degree} }$$
 
 $$score = \frac{pre\_score}{max(pre\_score)} - \lambda_2$$
+
 where
+
 * $pos\_proportion$: Proportion of times where word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
 * $\lambda_1$: Parameterisation parameter, used to modulate the effect of less relevant words.
 * $\theta$: angle of vector $(positive\_proportion,negative\_proportion)$, as discussed previously. 
 * $\lambda_2$: Offset to potentially give a negative value to less relevant words, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant words. This will be treated as a tuning parameter.
 
-Setting $\lambda_1$ to 1 and $\lambda_2$, we have a sample distribution, as follows:
+For illustration purposes, if we set $\lambda_1 = 1$ and $\lambda_2 = 0$, we obtain the following sample distribution:
 
 ```{r, scores_sample_0, eval=TRUE}
 p<- scores1$words %>%
@@ -584,7 +583,7 @@ p
 rm(p,scores1)
 ```
 
-Looking at the chart above, we have achieve the objectives of giving distinct scores depending on the apparent "catastrophe" value of each word. This however, does not reflect the amount of times a word appears - it may be the case that a particular term appears just one and gets an extreme score which is not really a good indicator of its real "catastrophe value. Thus, a last modification of the formula is required:
+The chart above shows we have achieved the objectives of giving distinct scores based on the  *catastrophe* value of each word. This however, does not reflect the amount of times a word appears - it may be the case that a particular term appears just one and gets an extreme score which is not really a good indicator of its real *disaster* value. Thus, a small modification of the formula is required:
 
 $$score = 
  \begin{cases} 
@@ -615,7 +614,7 @@ p<- scores2$words %>%
     geom_point(data=(scores1 %>% filter((word %in% selected_words))),
              color='navy',fill='navy',size=4,aes(text = paste("Word:", word))) +
   theme(legend.position="bottom") +
-  labs(title=" Positive Proportion vs Score - n>10 - empty shown as 0 ",x="Positive Proportion", y = "Score") +
+  labs(title=" Positive Proportion vs Score - n>10",x="Positive Proportion", y = "Score") +
   theme_grey() +
   geom_abline(color = "gray40", lty = 2)  +
   geom_text_repel(aes(label=ifelse((word %in% selected_words)&(pos_proportion>0.2),as.character(word),'')),
@@ -646,7 +645,7 @@ rm(p,scores1,scores2)
 ```
 
 
-With a set of scores, we would like to know if this produce a set of tweet scores that are a potential good input for a regression function. Due its simplicity, if we using a sum to calculate a score per tweet we can obtain those values with the below code:
+Then, we would like to know if these word scores produce a set of tweet scores that are a potential good input for a regression function. If we using a sum to calculate a score per tweet, this can be implemented in R with the below code:
 
 ```{r calculate_score, echo=TRUE, eval=FALSE}
 
@@ -665,25 +664,25 @@ offset<-0
 scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
 scores3<-score_tweets(training0,training_tokenised,scores2) 
 p1<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
-  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  labs(title=paste("Tweet Score - offset: ",offset),x="id", y = "Score") +
   theme_grey()
 offset<-0.2
 scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
 scores3<-score_tweets(training0,training_tokenised,scores2) 
 p2<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
-  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  labs(title=paste("Tweet Score - offset: ",offset),x="id", y = "Score") +
   theme_grey()
 offset<-0.4
 scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
 scores3<-score_tweets(training0,training_tokenised,scores2) 
 p3<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
-  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  labs(title=paste("Tweet Score - offset: ",offset),x="id", y = "Score") +
   theme_grey()
 offset<-0.6
 scores2 <-calculate_scores(training_tokenised,word_parameters=c("sin",1,0,10,offset))
 scores3<-score_tweets(training0,training_tokenised,scores2) 
 p4<- scores3$vector %>% ggplot(aes(id,word_score,color=target)) +geom_point() + theme(legend.position="bottom") +
-  labs(title=paste("Tweet Score for training set - offset: ",offset),x="id", y = "Score") +
+  labs(title=paste("Tweet Score - offset: ",offset),x="id", y = "Score") +
   theme_grey()
 
 grid.arrange(p1, p2,p3,p4, nrow=2)
@@ -691,9 +690,9 @@ grid.arrange(p1, p2,p3,p4, nrow=2)
 rm(score2,score3,offset,p1,p2,p3,p4)
 ```
 
-From the above, we can see that there is a diffuse division between positive and negative tweets. It is worth noticing this could potentially be improved with better modelling - however this could a problem but itself and the above - with tuning - is deemed acceptable for a first approximation. 
+We can see a diffuse division between positive and negative tweets. Of course, this could potentially be improved with better modelling, however we will consider it acceptable as a first step and for the purposes of this report. 
 
-A similar process has been done two create tweet scores for hashtags, links(or rather the domains of the unshorten URLs) and mentions. After try and error, a slightly different formula has been chosen for these three observations, represented below for hashtags:
+A similar process has been done to create tweet scores for hashtags, links(or rather the domains of the *unshortened* URLs) and mentions. After a bit of "trial and error", a slightly different formula has been chosen for these three attributes, which is shown below:
 
 $$pre\_score= \left( \frac{pos\_proportion}{\lambda_1} \right)^{\lambda_{2}} \cdot \frac{\theta}{90}$$
 $$ score =
@@ -743,13 +742,13 @@ rm(p1,p2,p3,scores2,scores3)
 ```
 
 
-In order to facilitate the next steps, the above process has been written into three functions, namely:
+In order to facilitate the next steps, the above process has been written into three functions:
 
-* **tokenise_data**, which takes the data in the pre-processed format and generates a data frames with the token words, hashtags, domains and Twitter handles.
-* **calculate_scores**,which takes the output of the previous function (*tokenised* data) and calculate the scores for each word, hashtag, link and handle. All the previously discussed tuning parameter have been defined as inputs for this function.
-* **score_tweets**, which will generate a score for each tweet for each of categories previously mentioned.
+* **tokenise_data**, which takes the data in the pre-processed format and generates data frames with the token words, hashtags, domains and handles.
+* **calculate_scores**, which takes the output of the previous function (*tokenised* data) and calculate the scores for each word, hashtag, link and handle. All the previously discussed tuning parameter have been defined as inputs for this function.
+* **score_tweets**, which will generate a score for each tweet, for each of the aforementioned categories.
 
-All these functions are written in the accompanying .R file, with in-line commentary explaining all the steps involved in the process.
+All these functions are written in the accompanying .R file, with in-line commentary explaining their key  steps.
 
 ## Finalising the model and data quality.
 
@@ -757,17 +756,17 @@ From here, we can move to the next step and to generate the last part of the mod
 
 Considering the work done so far, there are potentially many ways to use to the scores to create a model for prediction. After weighing the options, the following two-step approach will used:
 
-1. First, a regression algorithm will be used to train a model for each attribute - i.e. 4 different predictions will be generated using each of the 4 scores previously created independently. The result of this process will be vector for each tweet, with the results of each prediction (1,0 or potentially N/A if there is no such attribute for a given tweet.)
-2. Then this vector will be used again as a input of a second machine learning method , which will attempt to predict the target result based on the individual responses.
+1. First, a regression algorithm will be used to train a model for each attribute - i.e. 4 different and independent predictions will be generated. The result of this process will be vector for each tweet, with the results of each prediction (1,0 or potentially N/A if there is no such attribute for a given tweet).
+2. Then, this vector will be used as an input for a second machine learning method , which will attempt to predict the target result based on the individual responses.
 
 For this process, two functions have been written in this report .R file:
 
 * **fit_model**, which is the training function. Its inputs are the scores plus relevant tuning parameters. It will output 5  machine learning models (for each attribute plus the aggregate one).
 * **predict_values**, which will take the training score, the test data and the models previously generated. it will output the predictions and measure accuracy if the target value is provided.
 
-These functions leverage the caret package and they have been written to provide some flexibility - for example **fit_model** allows to be run using different machine learning models. For further details, please refer to the detailed commentary in the .R file.
+These functions leverage the caret package, and they have been written to provide some flexibility: for example **fit_model** allows to be run using different machine learning models. For further details, please refer to the detailed commentary in the .R file.
 
-For the initial run - that will help us establish and initial benchmark - the general linear model (glm) in caret is used for the individual predictions. For the aggregate prediction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). For this the below code is used:
+For the initial run - that will help us establish an initial benchmark - the general linear model (glm) in caret is used for the individual predictions. For the aggregate prediction, we will use [xgbBoost](https://en.wikipedia.org/wiki/XGBoost). The below code is used:
 
 
 ```{r first_prediction}
@@ -782,9 +781,9 @@ fitting_model <- fit_model(training_vector)
 results_1<-predict_values(test0,fitting_model,scores,extra_stop_words,domains_data)
 ```
 
-The accuracy for table and confusion matrix for this example are:
+The confusion matrix for this example is:
 
-```{r fp_acc, eval=TRUE}
+```{r fp_acc}
 results_1$eval %>% select(Method=eval,Accuracy=result_agg) %>%
   kable(caption="Initial results",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
@@ -814,7 +813,7 @@ fourfoldplot(results_1_cm$table,
 rm(results_1_cm)
 ```
 
-As observed, there are large number of false positives and false negatives. A sample of those is provided below:
+As observed, there is a significant amount of false positives and false negatives. A sample  is provided in the below tables.
 
 ```{r result_1_FP,eval=TRUE}
 orig_FP<-c(269,3581,1026,9779,10380,10402)
@@ -824,7 +823,7 @@ results_1$results_extended %>% filter(category == "FP")  %>%
   kable(caption="Initial results - False Positives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("striped","hold_position","scale_down")) 
+  kable_styling(latex_options =c("striped","HOLD_position","scale_down")) 
 
 ```
 
@@ -836,7 +835,7 @@ results_1$results_extended %>% filter(category == "FN")  %>%
   kable(caption="Initial results - False Negatives",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   column_spec(3,width = "30em") %>%
-  kable_styling(latex_options =c("striped","hold_position","scale_down")) 
+  kable_styling(latex_options =c("striped","HOLD_position","scale_down")) 
 
 ```
 
