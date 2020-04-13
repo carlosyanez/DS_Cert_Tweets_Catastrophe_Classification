@@ -839,7 +839,7 @@ results_1$results_extended %>% filter(category == "FN")  %>%
 
 ```
 
-A more detailed review of both sets, seems to indicated that the source file curation does seem to contain some errors : tweets that are seemingly not a catastrophe are tagged as such and vice-versa. One particular example of this are tweets allusive to the Hiroshima bombing in World War 2. Although those tweets a tragedy remembrance and do not carry the connotation of a current catastrophe, there are marked as "disaster" in the dataset.
+A more detailed review of both sets, shows the source file classification seems to contain errors: tweets that are seemingly not a catastrophe are tagged as such and vice-versa. One particular example of this are tweets allusive to the Hiroshima nuclear bombing. Those tweets are intended as  remembrance/memorial and hence are not related to a current catastrophe. However they are classified as "disaster".
 
 ```{r hiroshima_tweets,eval=TRUE}
 results_1$results_extended %>% filter(grepl("Hiroshima",text)) %>% select(id,target,original_text)  %>%
@@ -849,12 +849,13 @@ results_1$results_extended %>% filter(grepl("Hiroshima",text)) %>% select(id,tar
   kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
 
-The above reflects two important problems with machine learning and natural language:
+Although a complication, this is a good example of the complexity of processing natural language:
 
-1. This re-enforces that quality training data is essential. Bad data will probably result in bad results - even with a very sophisticated algorithm (It's called *Data* Science after all!).
-2. Human language is complicated. Meaning of each word is highly contextual and changes depending on the register, dialect and over time. This can be difficult for a machine learning model to **grasp**.
+1. Quality training data is essential. Bad data will probably result in bad results - even with a very sophisticated algorithm.
 
-To illustrate the second point, the above false positives and false negatives have been manually review and their new positive/negative result has been modified accordingly and added into the original data set. After feeding them back into the training dataset, selecting a new testing sample and running the machine learning model again, the below results are obtained:
+2. Human language is complicated. Meaning of each word is highly contextual and changes depending on the register, dialect and over time. This can be difficult for a machine learning model to *grasp*.
+
+As a way to mitigate this, false positives and false negatives have been manually reviewed and their new positive/negative result has been modified accordingly. After feeding them back into the training dataset (and selecting a new testing sample, and running the machine learning model), the below results are obtained:
 
 ```{r corrected_results0}
 corrections <- "target_corrected.csv"
@@ -912,7 +913,7 @@ results_2<-predict_values(test,fitting_model,scores,extra_stop_words,domains_dat
 rm(training_old,version_number)
 ```
 
-```{r fp_acc0,eval=TRUE}
+```{r fp_acc0}
 results_2$eval %>% select(Component=eval,Accuracy=result_agg) %>%
   kable(caption="Initial results - corrected dataset",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
@@ -925,11 +926,21 @@ if(eval==TRUE){
               }
 ```
 
-This illustrates that better training data can lead to better results. It is also worth noticing this may well reflect a real-life scenario, where a social media monitoring centre is constantly reviewing false negatives and false negatives with the purpose of keep re-training a model to adapt to changes language, emerging events, etc.
 
-Of course, the other components in the model can also benefit of this *curated* approach. In this report, and for illustration purposes - the  list of hashtags in the training set has been reviewed and then detected a couple of hashtags that most probably mean catastrophe (e.g. like #earthquake most like means one) and other most probably won't (like #ashes2017, which is unmistakable cricket, not matter how colourful and hyperbolic is the language).
+```{r results_comparison_1_2,eval=TRUE}
+results_comparison[1:2,] %>%
+  kable(caption="After Data Correction",format = "latex", booktabs = TRUE,
+        format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
+  kable_styling(latex_options =c("striped","hold_position")) 
+```
 
-Using a sample set of curated hashtag, it is possible to observe a small increment in accuracy. Handles and links will be left as a action to improve for the time being.
+
+
+This illustrates that better training data can lead to better results. It is also worth noticing this may well reflect a real-life scenario, where a social media monitoring centre is constantly reviewing false positives and false negatives with the purpose of continously re-training a model, to adapt to changes language, emerging events, etc.
+
+Of course the other attributes can also benefit of this *curated* approach. In this report, and for illustration purposes - the  list of hashtags in the training set has been reviewed. There are some  hashtags that most probably mean catastrophe (e.g. like #earthquake) and other than most probably don't (like #ashes2017, which is cricket related).
+
+Using a sample set of curated hashtags, it is possible to observe a small increment in accuracy (shown in the below table). Handles and links will be left as a action to improve for the time being.
 
 ```{r}
 scores<- calculate_scores(training_tokenised,
@@ -944,7 +955,7 @@ results_3<-predict_values(test,fitting_model,scores,extra_stop_words,domains_dat
 ```
 
 
-```{r fp_acc3,eval=TRUE}
+```{r fp_acc3}
 results_3$eval %>% select(Component=eval,Accuracy=result_agg) %>%
   kable(caption="Initial results - Curated Hashtags",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
@@ -957,11 +968,10 @@ results_comparison <- add_row(results_comparison,
 }
 ```
 
-Looking at the work done so far, we have the below table showing the improvements obtained by improving and supplementing the data:
 
 ```{r results_comparison_1_0,eval=TRUE}
 results_comparison[1:3,] %>%
-  kable(caption="Initial Comparison",format = "latex", booktabs = TRUE,
+  kable(caption="After Hashtag Curation",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","hold_position")) 
 ```
@@ -969,15 +979,15 @@ results_comparison[1:3,] %>%
 
 ## Tuning
 
-With this new, *augmented* dataset the next step of the process is to tune the model. Looking at how the model it's constructed, there are *many* aspects to tune, namely:
+With this new and *improved* dataset, the next step is to tune the model. Looking at how it's constructed, there are *many* aspects to tune, namely:
 
 * The parameters used to calculate the tweet, hashtag, link and mention scores.
 * The selection of classification algorithms used.
-* The tuning parameters of each selection algorithm.
+* The tuning parameters of each classification algorithm.
 
-Obviously, tuning every single parameter will result in quite a lengthy exercise. Instead, this report will focus on some of the key components in this model and discus what works and what else could be done.
+Tuning every single parameter will result in quite a lengthy exercise. Instead, this report will focus on some of the key components. Then  it will discus what works and what else could be done.
 
-The first aspect to tune is the each word in the training corpus gets a individual score. This is perhaps the key component of the model. From the previous section, we have that this score is calculated through the below formulas:
+The first aspect to tune is the scoring function for word in training set. This is perhaps the key component of the model. From the previous section, we have that this score is calculated through the below formulas:
 
 $$pre\_score = sin(pos\_proportion)^{\lambda_1}*\frac{\theta}{90 \si{\degree} }$$
 $$score = 
@@ -988,14 +998,17 @@ $$score =
   
 
 where
-* $pos\_proportion$: Proportion of times where word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
-* $\lambda_1$: Parameterisation parameter, used to modulate the effect of less relevant words.
+
+* $pos\_proportion$: Proportion of times where a word was found in a "positive" tweet. This sinus of this parameter is used to help penalise less relevant words.
+* $\lambda_1$: Parameterisation parameter, used to mitigate the effect of less relevant words.
 * $\theta$: angle of vector $(positive\_proportion,negative\_proportion)$, as discussed previously. 
 * $\lambda_2$: Offset to potentially give a negative value to less relevant words, in order to provide compensation - e.g. in case a "disaster" word is used in figurative context amongst many non relevant words. This will be treated as a tuning parameter.
 * $n$ : number of times the word is appears in the training set,
-* $\lambda_3$: arbitrary threshold to filter word with a low number of occurrences (and possibly biased). This is a tuning parameter.
+* $\lambda_3$: arbitrary threshold to filter word with a low number of occurrences. This is a tuning parameter.
 
-In this report, $\lambda_2$ and $\lambda_3$ will be tuned, to see how the penalisation of irrelevant words and minimum number of occurrences affect the model. The results of tuning lambda_2 are shown below.
+In this report, $\lambda_2$ and $\lambda_3$ will be tuned, which the intent of seeing how the penalisation of irrelevant words and minimum number of occurrences affect the model. 
+
+The results of  $\lambda_2$'s tuning are shown below.
 
 ```{r word_lambda_2_tuning}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
@@ -1040,7 +1053,7 @@ results_comparison <- add_row(results_comparison,
 
 ```
 
-As shown above, the best result is obtained with $lambda_2$=`r word_lambda_2`. It is also worth noticing that increasing this value won't necessarily result in better results, since it will then penalise "neutral" terms too.
+As shown above, the best result is obtained with $\lambda_2$=`r word_lambda_2`. It is also worth noticing that increasing this value won't necessarily result in better results, since it will then penalise "neutral" terms too.
 
 With this value, we will then also find if there is an optimal $\lambda_3$, i.e. to see if removing the words that rarely appear have an negative impact in the model. The results are shown below:
 
@@ -1090,11 +1103,11 @@ results_comparison <- add_row(results_comparison,
 ```
 
 
-This result is a bit more interesting. As observed above, the first optimal $\lambda_3$ is quite a low value, however there is a relative bigger decrease in accuracy around its neighbours when compared against the second best $\lambda_3$. It is important to notice that the accuracy  depends on the corpus of words in the test set and how they are combined into sentences. This is of course random and it will change from set to set. Even though we can do cross validation, perhaps it is not a bad a idea (as an initial step), choose a perhaps sub-optimal value for the sake of consistency - at least until more thorough tuning is possible. Therefore, to continue with this exercise, a value of $lambda_3$=`r word_lambda_3` has been chosen.
+This result is a bit more interesting. As observed above, the first optimal $\lambda_3$ is quite a low value, however there is a relative bigger decrease in accuracy around its neighbours when compared against the second best $\lambda_3$. It is important to notice that the accuracy  depends on the corpus of words in the test set and how they are combined into sentences. This is of course random and it will change if the training data changes. Even though we can do cross validation, perhaps it is not a bad a idea to choose a perhaps sub-optimal value for the sake of consistency - at least until more thorough tuning is possible. Therefore, to continue with this exercise, a value of $\lambda_3$=`r word_lambda_3` has been chosen.
 
-After the word scoring, perhaps the most relevant component in the model is the scoring function for hashtags (given that hashtag intend to be **meaningful** descriptors). Similarly to the word scoring, we will tune the equivalent parameters hashtag's $lamdba_2$ and $lamdba_3$.
+After the word scoring, perhaps the most relevant component in the model is the scoring function for hashtags (given that hashtag intend to be **meaningful** descriptors). Similarly to the word scoring, we will tune the equivalent parameters hashtag's $\lambda_2$ and $\lambda_3$.
 
-The results for the tuning of $lamdba_2$ are shown below:
+The results for the tuning of $\lambda_2$ are shown below:
 
 
 ```{r hashtag_lambda_2_tuning}
@@ -1143,10 +1156,10 @@ hashtag_lambda_2 <- 0.5
 
 The first graph shows the overall accuracy results (comparable to the word tuning), while the second graph shows the results where there is a hashtag. From them, the following points can be made:
 
-* Smaller variations in the overall score can be explained to the fact that not all tweets have hashtags, thus the effect of tuning this part of the model will obviously have a limited effect on the general result.
-* Taking the above point, it looks like its contribution to general score it is mostly when hashtags do indicate a catastrophe (and therefore have a bigger score). It is worth noticing that many of the high-score hashtag were not ranked by the algorithm but manually added - which is perhaps and indication that manual curation is not necessarily a bad idea - especially when data is poor quality or insufficient.
+* Smaller variations in the overall score can be explained by the fact that not all tweets have hashtags, thus the effect of tuning this part of the model will obviously have a limited effect on the general result.
+* Expanding the above point, it looks like its contribution to general score it is mostly when hashtags do indicate a catastrophe (and therefore have a bigger score). It is worth noticing that many of the high-score hashtag were not ranked by the algorithm but manually added - which is perhaps and indication that manual curation is not necessarily a bad idea - especially when data is poor quality or insufficient.
 
-With this mind, the tuning of $lamdba_3$ will help to determine the overall effect of hashtag occurrence. The results are shown in the below chart.
+With this mind, the tuning of $\lambda_3$ will help to determine the overall effect of hashtag occurrence. The results are shown in the below chart.
 
 ```{r hashtag_lambda_3}
 training_tokenised <- tokenise_data(training,extra_stop_words,domains_data,training_flag=TRUE)
@@ -1190,7 +1203,7 @@ results_comparison <- add_row(results_comparison,
 
 This result seems similar in nature to the tuning for quantity cut-off for the word scoring.
 
-Looking at the results so far (table below), this tuning process has only resulted in small gains when compared with the initial data corrections. Taking that the effect of hashtag tuning is small, in this report the tuning of the links and handle scoring functions will not be conducted. This doesn't mean they may bring an improved accuracy but perhaps are not worth the effort given the existing training dataset.
+Looking at the results so far (table below), this tuning process has only resulted in small gains when compared with the initial data corrections. Considering that the effect of hashtags is small, in this report the tuning of the links and handle scoring functions will not be conducted. This doesn't mean they may bring an improved accuracy, but perhaps are not worth the effort with the existing training dataset.
 
 ```{r results_comparison_2,eval=TRUE}
 results_comparison[1:6,] %>%
@@ -1230,7 +1243,11 @@ Instead, the decision is to focus on the tuning of the classification functions.
 * *glm* (as in generalised linear model) in its logistic regression mode to turn word, hashtag, link and mention to make a prediction on those components independently.
 * *xgbTree* (extreme gradient boosting) to predict an "overall" positive or negative based on the previous predictions.
 
-Considering that the assignment instructions state  **"For this project, you will be applying machine learning techniques that go beyond standard linear regression"**, the next stage will be to asses if there is any model that produces better results than glm. (Although so far this is not a **standard**  linear regression model any more.)
+Considering that the assignment instructions state
+
+> *For this project, you will be applying machine learning techniques that go beyond standard linear regression*
+
+the next stage will be to asses if there is any model that produces better results than glm. (Although so far this is not a **standard**  linear regression model any more.)
 
 After investigating a number of possible algorithms, the [**LogitBoost**](https://en.wikipedia.org/wiki/LogitBoost) will use as comparison. This algorithm is available in R through the [**caTools**](https://www.rdocumentation.org/packages/caTools/versions/1.17.1/topics/LogitBoost) package.
 
@@ -1263,8 +1280,7 @@ stats_5 <- results$eval
 ```{r word_logitboost_result, eval=TRUE}
 word_model_1$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
-  geom_point(color='grey',fill='grey',size=4) +
- # geom_point(data=(. %>% filter(accuracy == stats_3[which.max(accuracy),]$accuracy)),color='red',fill='red',size=4) +
+  geom_point(color='red',fill='red',size=4) +
   theme(legend.position="bottom") +
   labs(title="Word Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey() 
@@ -1278,7 +1294,7 @@ results_comparison <- add_row(results_comparison,
 
 
 Please note graph above shows the accuracy results for the LogitBoost regression only, not for the entire model. However, it shows that in this case the tuning has not effect. 
-In this case, the overall accuracy equals *`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`*.These result is no better than the one using the a simple logistic regression. Similar results are obtained when the same comparison is repeated for the other scoring components.
+In this case, the overall accuracy equals *`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`*, which is no better than the one obtained with a simple logistic regression. Similar results are obtained when the same comparison is repeated for the other scoring components.
 
 
 ```{r other_logitboost}
@@ -1312,14 +1328,14 @@ stats_6 <- results$eval
 
 p1<- hashtag_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
-  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(color='red',fill='red',size=4) +
   theme(legend.position="bottom") +
   labs(title="Hashtag Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey() 
 
 p2<- link_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
-  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(color='red',fill='red',size=4) +
 
   theme(legend.position="bottom") +
   labs(title="Link Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
@@ -1327,7 +1343,7 @@ p2<- link_model_2$results %>% select(Iterations=nIter,Accuracy) %>%
 
 p3<- handle_model_2$results %>% select(Iterations=nIter,Accuracy) %>% 
   ggplot(aes(Iterations,Accuracy)) +
-  geom_point(color='grey',fill='grey',size=4) +
+  geom_point(color='red',fill='red',size=4) +
   theme(legend.position="bottom") +
   labs(title="Handle Score - LogitBoost tuning",x="Iterations", y = "Accuracy") +
   theme_grey()
@@ -1344,18 +1360,18 @@ results_comparison <- add_row(results_comparison,
 rm(p1,p2,p3)
 ```
 
-In this case, the accuracy value equals  **`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`**, which is no better than the classification using a logistic regression.  
+In this case, the accuracy value equals  **`r stats_5[which(stats_5$eval=="aggregate"),]$result_method`**, which is worse  than the logistic regression result.  
 
-This results shouldn't be confusing - a more "sophisticated" method does not necessarily mean a better result  the important thing is to find the model that better represents the problem at hand (when possible). Simpler models may also have an advantage in terms of processing time - which may be a key factor to consider even if other models perform marginally better. 
+These results shouldn't be confusing - a more "sophisticated" method does not necessarily mean a better result  the important thing is to find the model that better represents the problem at hand (when possible). Simpler models may also have an advantage in terms of processing time - which may be a key factor to consider even if other models perform marginally better. 
 
 
 Completed the above steps, there is one aspect left to tune : the XGBoost algorithm. This method has several parameters, for which a good explanation of them can be found [here](https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/beginners-tutorial-on-xgboost-parameter-tuning-r/tutorial/). 
 
-Given the number of parameters, a full sweep of all them could take very, very long. However, the caret packages already does some tuning by default. We will use the results from the previous iteration as a starting point.
+Given the number of parameters, a full sweep could take very, very long. However, the caret packages already does some tuning by default. We will use the results from the previous iteration as a starting point.
 
 
 ```{r xgbTree_best_tune, eval=TRUE}
-aggregate_model_2$bestTune %>% kable(caption="XGBoost - Best Tune",format = "latex", booktabs = TRUE,
+aggregate_model_2$bestTune %>% kable(caption="XGBoost - caret's Best Tune",format = "latex", booktabs = TRUE,
         format.args = list(decimal.mark = '.',   big.mark = " ")) %>% 
   kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
@@ -1368,8 +1384,8 @@ training_tokenised <- tokenise_data(training,extra_stop_words,
 scores<- calculate_scores(training_tokenised,
                              word_parameters=c("sin",1,0,
                                                word_lambda_3,word_lambda_2),
-                             hashtag_parameters=c("exp",4,
-                                                  hashtag_lambda_2,hashtag_lambda_3),
+                             hashtag_parameters=c("exp",4,                                                                       hashtag_lambda_2,
+                                                  hashtag_lambda_3),
                              handle_parameters=c("exp",4,0.8,4),
                              link_parameters=c("exp",4,0.9,4),
                               manual_scores = manual_scores)
