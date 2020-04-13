@@ -1427,7 +1427,7 @@ results_comparison <- add_row(results_comparison,
 ```
 
 
-When compared with all the previous results, we have the below chart
+When compared with all the previous results, we have the below table:
 
 ```{r results_after_training, eval=TRUE}
 results_comparison %>%
@@ -1436,19 +1436,19 @@ results_comparison %>%
   kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
 
-As shown above, the greatest gains in accuracy are due to the data correction and the tuning of the word scoring formula. Further tuning only produces worse or marginally better results (from hashtag optimisation to optimised XGBoost, for example). Furthermore, the first impression is that perhaps there is a ceiling that has been reached, perhaps due to the limitation of the model or quality of the training data (bad inputs -> bad results).
+As shown above, the greatest gains in accuracy are due to the data correction and the tuning of the word scoring formula. Further tuning only produces worse or marginally better results (from hashtag optimisation to optimised XGBoost, for example). Furthermore, it seems that there is a ceiling that has been reached, perhaps due to the limitation of the model or quality of the training data (bad inputs -> bad results).
 
-Nevertheless, up to this point we have try touched all the relevant aspects of the model. Therefore (for the purpose of the this assignment), the only step left is to assess against the validation data and then comment based on those results.
+Nevertheless, up to this point we have touched on all the relevant aspects of the model. Therefore (for the purpose of the this assignment), the only step left is to assess against the validation data and then comment based on those results.
 
 \newpage
 # Results
 <!-- A results section that presents the modelling results and discusses the model performance. -->
 
-As the last step of this report, the model has been assessed against the **validation** dataset that was set aside a the beginning of this exercise. In order to accomplish this, the below steps have been followed:
+As the last step of this report, the model has been assessed against the **validation** dataset that was set aside a the beginning of this exercise. In order to do this, the below steps have been followed:
 
 1. **Training** and **test** set have been merged into one dataset.
 2. The model has been trained against this new dataset.
-3. The newly-trained model has been used to generate prediction for the **validation** dataset
+3. The newly-trained model has been used to generate predictions for the **validation** dataset
 
 ```{r}
 
@@ -1494,7 +1494,7 @@ results_validation$eval  %>% select(Component=eval,Accuracy=result_agg) %>%
   kable_styling(latex_options =c("striped","HOLD_position")) 
 ```
 
-The confusion matrix for this result is shown below:
+This results in an accuracy value of *`r results_validation$eval[which(results_validation$eval$eval=="aggregate"),]$result_method`**. The confusion matrix summary is shown below:
 
 ```{r validation_cm,eval=TRUE}
 
@@ -1510,7 +1510,7 @@ fourfoldplot(validation_cm$table,
            #text(-0.4, -0.4, "FP", cex=1)
 ```
 
-Looking at those results, it looks like we have reached some sort of ceiling for the model. As mentioned before, possible culprits are the model or the data. Considering that at the start of the this report data issues were flagged, it wouldn't be unreasonable to suspect that is a main contributor. To confirm this, both false positives and false negatives were inspected - below are a sample of both groups:
+Looking at this result, it looks like we have reached some sort of ceiling for the model. As mentioned before, possible culprits are the model or the data. Considering that at the start of the this report data issues were flagged, it wouldn't be unreasonable to suspect that is a main contributor. To confirm this, both false positives and false negatives were inspected - below are a sample of both groups:
 
 ```{r validation_FP, eval=TRUE}
 results_validation$results_extended  %>% filter(category=="FP") %>%
@@ -1534,7 +1534,7 @@ results_validation$results_extended %>%  filter(category=="FN") %>%
 
 ```
 
-After inspecting for set, it looks like there is a problem of misclassification with the false negatives. In this case the model *correctly* predicts most of them as not a disaster tweet. However, upon inspection it seems the model is clearly *incorrectly* classifying most of all false positives. It is worth noticing though that all of them contain "catastrophe" words. A possible reason of this that the model is mostly driven by the words rather than the other attributes and its limited lexicon results in wrong scores for those tweets. Fortunately, it is possible to see for those tweets whether a prediction for each component was generated of not, which is shown in the below charts, for false positives and all validation tweets.
+After inspecting for set, it looks like there is a problem of misclassification with the false negatives. In this case the model *correctly* predicts most of them as not a disaster tweet. However, upon inspection it seems the model is clearly *incorrectly* classifying most of all false positives. It is worth noticing though that all of them contain *catastrophic* words. A possible reason of this that the model is mostly driven by the words rather than the other attributes and its limited lexicon results in wrong scores for those tweets. Fortunately, it is possible to see for those tweets whether a prediction for each component was generated of not, which is shown in the below charts, for false positives and all validation tweets.
 
 ```{r validation_predictions_fp, eval=TRUE}
 agg_summary <- results_validation$results_extended %>%
@@ -1589,7 +1589,7 @@ overall_summary %>% select(-category) %>%
     filter(!is.na(value)) %>% filter(!(value==0)) %>%
   group_by(method,prediction) %>% summarise(value=sum(value)) %>% ungroup() %>%
   ggplot(aes(x=method,y=value,fill=prediction,label=value)) + geom_col() +
-  labs(title="Count of Predictions per component - All Validation Results",x="Component Prediction", y = "Count") + geom_text(position = position_stack(vjust = 0.5)) +
+  labs(title="Count of Predictions per component -Val. Results",x="Component Prediction", y = "Count") + geom_text(position = position_stack(vjust = 0.5)) +
   theme_grey() 
   
 ```
@@ -1599,9 +1599,9 @@ Both results show - interestingly that the overall results is almost entirely dr
 ```{r validation_training, eval=TRUE}
 training_vector_validation$split %>% select(type,n_perc) %>% mutate(percentage=round(n_perc,2)) %>%
   ggplot(aes(x=type,y=percentage,label=percentage)) %>%
-  + geom_col(fill="#FFDB6D") +
+  + geom_col(fill="#add8e6") +
   labs(title="Training set split by attributes",x="Component Prediction", y = "Percentage (%)") +
-  theme(axis.text.x = element_text(angle = 25, hjust = 1)) +
+  coord_flip() +
   geom_text(position = position_stack(vjust = 0.5)) +
   theme_grey() 
 ```
@@ -1621,9 +1621,9 @@ left_join((training_tokenised_validation$tokenised_words %>% select(word,target)
 rbind(absent,present) %>% group_by(target) %>%
   summarise(q=n()) %>% ungroup %>%
   ggplot(aes(x=target,y=q,label=q)) +
-   geom_col(fill="#FFDB6D") +
+   geom_col(fill="#add8e6") +
   labs(title="Validation Words - Presence in Training Lexicon",x="Presence", y = "Count") +
-  theme(axis.text.x = element_text(angle = 25, hjust = 1)) +
+  coord_flip() +
   geom_text(position = position_stack(vjust = 0.5))+
   theme_grey() 
 
@@ -1637,11 +1637,11 @@ The consequence of this will be incorrect or incomplete scoring - this is one pr
 # Conclusion
 <!-- A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work. -->
 
-In this report, we have attempted to create a machine learning model that correctly predicts whether a tweet correspond to a *disaster* or *catastrophic* event. A model to achieve this has been proposed, which combines individual predictions for each of the key available attributes of each tweet into a combined score, using the XGBoost algorithm. Through, successive data corrections and tuning the model the results were incrementally improved. Tested against the validation set, an accuracy of **`r results_validation$eval[which(results_validation$eval$eval=="aggregate"),]$result_method`**. 
+In this report, we have attempted to create a machine learning model that correctly predicts whether a tweet correspond to a *disaster* (or *catastrophic*) event. A model to achieve this has been proposed, which combines individual predictions for each of the key available attributes of each tweet into a combined score, using the *XGBoost* algorithm. Through, successive data corrections and tuning the model the results were incrementally improved. Tested against the validation set, an accuracy of **`r results_validation$eval[which(results_validation$eval$eval=="aggregate"),]$result_method`** was achieved. 
 
-Clearly, the presented is far from perfect. However through its flaws it was possible to draw a number of valuable conclusions which reflect relevant challenges applicable both in this particular case and in general practice. These main take aways are:
+Clearly, this is far from perfect. However, through its flaws, it was possible to draw a number of valuable conclusions which reflect relevant challenges applicable both to this particular case and to general practice. These main take aways are:
 
-* A good quality training dataset is essential. Poorly curated training data will probably result in substandard predictions (the discipline is called **Data** Science after all!)
+* A good quality training dataset is essential. Poorly curated training data will probably result in substandard or incorrect predictions (the discipline is called **Data** Science after all!)
 * Like in problem in Science/Engineering, coming up with a model that properly fits the problem is also essential. There aren't universal solutions and more *sophisticated* and popular models are not silver bullets. Sometimes, simpler linear models will be the best available fit - considering both accuracy, computing resources and the intention behind solving the problem.
 * Tuning can be an enormous undertaking. Again, it is important to understand the purpose of behind the problem and be practical.
 * In relation to this problem, natural language can be especially challenging. A simple model like this cannot really interpret meaning the same way a human does. The dictionary is always growing and changing - even one word can mean different things.
@@ -1652,7 +1652,7 @@ If someone would like to continue this work, there are multiple paths to keep ex
 ** a greater proportion of hashtags, links and handles to see how they can better supplement the words in the tweet.
 ** a more diverse vocabulary to have a better collection of disaster and non-disaster words.
 * In addition, a dataset with other property would be able also help to improve this model, for instance:
-** rate tweets based on user ids (e.g. identify MMORPG players, shock jocks, emergency institutions, earthquake watchers,etc.).
+** rate tweets based on user ids (to differentiate between MMORPG players and defence forces, identify shock jocks, emergency institutions, earthquake watchers,etc.).
 ** add a time and location function, which can be cross-referenced with other sources for catastrophic events (e.g. give a higher rating to all tweets from a particular city when a natural disaster strikes)
 * Also, it would be interesting to see how this model rates against other natural language classification problems, like the [Onion or Not dataset in Kaggle](https://www.kaggle.com/chrisfilo/onion-or-not/kernels).
  
