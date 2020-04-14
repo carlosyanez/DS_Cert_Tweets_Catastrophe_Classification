@@ -16,3 +16,4 @@ This report attempts to create a machine learning model to identify tweets based
 * [Markdown File](https://github.com/carlosyanez/Tweets_Catastrophe_Classification/blob/master/Twitter_Classifier.Rmd)
 
 
+![Sample Chart](sample_image.png "Sample Chart")
